@@ -1,0 +1,40 @@
+# `db` is always started by `docker compose up -d`. `ollama` is OPT-IN via the
+# "ollama" profile (`docker compose --profile ollama up -d`): on Windows the
+# recommended setup is a native Ollama install (see docs/setup.md), which is
+# faster (GPU access) and avoids running a second container nobody needs when
+# OLLAMA_BASE_URL already points at a native install or at OpenRouter is used.
+# Both ports are bound to 127.0.0.1 only (not 0.0.0.0): reachable from the
+# host for local development and scripts/check_env.py, not exposed on the network.
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-maintidoc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maintidoc}
+      POSTGRES_DB: ${POSTGRES_DB:-maintidoc}
+    ports:
+      # Host port 5433 (not 5432): this dev machine already runs another
+      # PostgreSQL instance natively on 5432. Adjust DATABASE_URL in .env to match.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maintidoc} -d ${POSTGRES_DB:-maintidoc}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  db_data:
+  ollama_data:

@@ -1,0 +1,20 @@
+[theme]
+base = "light"
+primaryColor = "#0B5C7A"
+backgroundColor = "#F4F6F8"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0F1B2D"
+font = "'IBM Plex Sans':https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
+borderColor = "#E1E6EB"
+baseRadius = "10px"
+buttonRadius = "10px"
+linkColor = "#0B5C7A"
+redColor = "#B42318"
+greenColor = "#157347"
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+maxUploadSize = 50

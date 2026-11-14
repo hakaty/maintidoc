@@ -1,0 +1,4 @@
+{
+  "default_mode": "Simple (RAG)",
+  "reason": "Post-fix real eval (eval/results_simple_after.json vs eval/results_agent_after.json): expected_page_hit_rate Simple=0.808 vs Agent=0.769 (Agent within 5 points per the M7-follow-up target, but Simple still higher). Agent is faster (p50 7.7s/p95 20.5s vs Simple p50 14.9s/p95 26.9s) and ties on refusal_accuracy (0.839 both) and citation_validity (1.0 both), but the chip-verification rule picks strictly by expected_page_hit_rate, so Simple stays default."
+}

@@ -1,0 +1,171 @@
+# Jeu d'évaluation de la recherche (Milestone 4) : 20 questions en français,
+# écrites en lisant le PDF réel (data/pdf/document.pdf, notice Lowara
+# CEA/CIE/CA). Chaque question answerable=true indique la/les page(s) et le
+# content_type attendus dans l'index texte ("text" | "table" |
+# "image_description"). Les deux questions answerable=false ne sont pas
+# couvertes par le manuel : elles servent à observer le score du meilleur
+# résultat retourné quand il n'y a pas de bonne réponse à trouver.
+#
+# Les valeurs de ce fichier sont des résultats observés sur CE document,
+# pas des garanties générales de l'index.
+
+questions:
+  - id: q01
+    question: "Quels sont les quatre niveaux de danger utilisés dans ce manuel, du plus grave au moins grave ?"
+    expected_pages: [4]
+    expected_content_type: table
+    safety: true
+    answerable: true
+    notes: "Table 'Niveaux de danger' p.4 : DANGER, AVERTISSEMENT, PRUDENCE, REMARQUE."
+
+  - id: q02
+    question: "Que faut-il faire si le dispositif de protection à courant différentiel résiduel (RCD) s'est déclenché et que l'unité ne s'allume pas ?"
+    expected_pages: [35]
+    expected_content_type: table
+    safety: true
+    answerable: true
+    notes: "Table '9.1 L'unité ne s'allume pas' p.35 : Réinitialiser le dispositif de protection."
+
+  - id: q03
+    question: "Quelle peut être la cause de performances hydrauliques faibles ou nulles si la vanne d'isolement sur la conduite de refoulement est fermée ?"
+    expected_pages: [35]
+    expected_content_type: table
+    safety: false
+    answerable: true
+    notes: "Table '9.2 Performances hydrauliques faibles ou nulles' p.35."
+
+  - id: q04
+    question: "Quelle est la température maximale admissible du liquide avec une garniture mécanique en EPDM ?"
+    expected_pages: [38]
+    expected_content_type: table
+    safety: false
+    answerable: true
+    notes: "Table des limites température/pression par type de joint, p.38 : 110°C (230°F)."
+
+  - id: q05
+    question: "Quel matériau est utilisé pour les pièces en contact avec le liquide sur les modèles CEA, CIE et CA (hors version N) ?"
+    expected_pages: [40]
+    expected_content_type: table
+    safety: false
+    answerable: true
+    notes: "Table '10.7 Matériaux en contact avec le liquide' p.40 : Acier inoxydable / AISI 304."
+
+  - id: q06
+    question: "Combien de démarrages par heure au maximum sont autorisés pour une unité dont la puissance nominale est comprise entre 18,5 et 22 kW ?"
+    expected_pages: [40]
+    expected_content_type: table
+    safety: false
+    answerable: true
+    notes: "Table '10.4 Nombre maximum de démarrages et d'arrêts' p.40 : 24/h."
+
+  - id: q07
+    question: "Que représente le pictogramme associé aux niveaux de danger au début de ce manuel ?"
+    expected_pages: [4]
+    expected_content_type: image_description
+    safety: true
+    answerable: true
+    notes: "Figure p.4 : triangle jaune avec un point d'exclamation noir."
+
+  - id: q08
+    question: "Quel pictogramme de sécurité, parmi les symboles complémentaires, signale un risque d'atmosphère explosive ?"
+    expected_pages: [5]
+    expected_content_type: image_description
+    safety: true
+    answerable: true
+    notes: "Figure p.5 : triangle jaune avec le texte 'EX' au centre."
+
+  - id: q09
+    question: "Quel équipement de protection individuelle est représenté par l'un des pictogrammes de la section Symboles complémentaires ?"
+    expected_pages: [5]
+    expected_content_type: image_description
+    safety: true
+    answerable: true
+    notes: "Figure p.5 : pictogramme montrant des gants de protection."
+
+  - id: q10
+    question: "Comment réaliser l'élingage de l'unité pour la lever, d'après l'illustration du chapitre Manutention et stockage ?"
+    expected_pages: [8]
+    expected_content_type: image_description
+    safety: true
+    answerable: true
+    notes: "Figure p.8 : grue avec corde/élingue pour le levage de l'unité."
+
+  - id: q11
+    question: "Quel symbole accompagne les informations DEEE sur la mise au rebut de l'unité en fin de vie ?"
+    expected_pages: [41]
+    expected_content_type: image_description
+    safety: true
+    answerable: true
+    notes: "Figure p.41 : symbole de recyclage / poubelle barrée."
+
+  - id: q12
+    question: "Qui est autorisé à installer, utiliser et entretenir l'unité ?"
+    expected_pages: [6]
+    expected_content_type: text
+    safety: true
+    answerable: true
+    notes: "Section 1.3 Sécurité de l'utilisateur, p.6 : le personnel qualifié."
+
+  - id: q13
+    question: "À quelle température ambiante l'unité emballée doit-elle être stockée ?"
+    expected_pages: [9]
+    expected_content_type: text
+    safety: false
+    answerable: true
+    notes: "Section 2.4 Stockage, p.9 : de -5°C à +40°C (23°F à 140°F)."
+
+  - id: q14
+    question: "Quelle classe de résistance à la compression le béton de la base d'installation doit-il avoir ?"
+    expected_pages: [20]
+    expected_content_type: text
+    safety: false
+    answerable: true
+    notes: "Section 4.3 Exigences de la base en béton, p.20 : classe C12/15."
+
+  - id: q15
+    question: "Que risque-t-il de se passer avec un moteur monophasé équipé d'une protection thermique à réinitialisation automatique, après qu'il a refroidi ?"
+    expected_pages: [26]
+    expected_content_type: text
+    safety: true
+    answerable: true
+    notes: "Section 6.3 Connexion du moteur, p.26 : redémarrage soudain, risque de blessure."
+
+  - id: q16
+    question: "Tous les combien d'heures de fonctionnement (ou d'années) faut-il remplacer les roulements du moteur lubrifiés en permanence ?"
+    expected_pages: [34]
+    expected_content_type: text
+    safety: false
+    answerable: true
+    notes: "Section 8.4, p.34 : toutes les 17500 heures ou bien une fois tous les 5 ans."
+
+  - id: q17
+    question: "Quel est l'indice de protection (IP) du moteur et de l'électropompe ?"
+    expected_pages: [40]
+    expected_content_type: text
+    safety: false
+    answerable: true
+    notes: "Section 10.5 Caractéristiques électriques, p.40 : Moteur IP55, Électropompe IPX5."
+
+  - id: q18
+    question: "Où trouver les informations sur la garantie de l'unité ?"
+    expected_pages: [45]
+    expected_content_type: text
+    safety: false
+    answerable: true
+    notes: "Section 13 Garantie, p.45 : se reporter à la documentation commerciale."
+
+  - id: q19
+    question: "Quelle est la consommation électrique annuelle moyenne d'une pompe CEA 70/5 en fonctionnement continu ?"
+    expected_pages: []
+    expected_content_type: null
+    safety: false
+    answerable: false
+    notes: "Non couvert : le manuel ne fournit aucun calcul de consommation annuelle."
+
+  - id: q20
+    question: "Quel est le prix de vente recommandé pour la pompe CA 1206/3 ?"
+    expected_pages: []
+    expected_content_type: null
+    safety: false
+    answerable: false
+    notes: "Non couvert : les tarifs ne figurent pas dans ce manuel technique."

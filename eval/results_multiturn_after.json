@@ -1,0 +1,92 @@
+{
+  "by_turn_hit_rate": {
+    "turn_1": 1.0,
+    "turn_2": 0.833
+  },
+  "details": [
+    {
+      "conversation": "mt01",
+      "turn": 1,
+      "question": "Que faut-il faire si le RCD s'est déclenché ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt01",
+      "turn": 2,
+      "question": "Et si ça ne suffit pas, quelle est l'étape suivante ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt02",
+      "turn": 1,
+      "question": "Quelle classe de résistance à la compression le béton doit-il avoir ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt02",
+      "turn": 2,
+      "question": "À quelle section du manuel ça correspond ?",
+      "hit": false,
+      "refused": true
+    },
+    {
+      "conversation": "mt03",
+      "turn": 1,
+      "question": "À quelle température ambiante l'unité emballée doit-elle être stockée ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt03",
+      "turn": 2,
+      "question": "Et pour une unité non emballée, y a-t-il une différence ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt04",
+      "turn": 1,
+      "question": "Que risque un moteur monophasé après avoir refroidi ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt04",
+      "turn": 2,
+      "question": "Pourquoi est-ce dangereux exactement ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt05",
+      "turn": 1,
+      "question": "Quel est l'indice de protection du moteur ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt05",
+      "turn": 2,
+      "question": "Et celui de l'électropompe, c'est le même ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt06",
+      "turn": 1,
+      "question": "Où trouver les informations sur la garantie de l'unité ?",
+      "hit": true,
+      "refused": false
+    },
+    {
+      "conversation": "mt06",
+      "turn": 2,
+      "question": "Donc je ne trouverai pas la durée exacte dans ce manuel ?",
+      "hit": true,
+      "refused": false
+    }
+  ]
+}

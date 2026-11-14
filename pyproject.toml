@@ -1,0 +1,77 @@
+[project]
+name = "maintidoc"
+version = "0.1.0"
+description = "RAG multimodal agentique sur un document technique de maintenance (Partie I)."
+requires-python = ">=3.11,<3.12"
+readme = "README.md"
+
+# M1 (config, LLM provider factory, DB/pgvector bootstrap, PDF inspection) +
+# M2 (LlamaIndex-based text/table/image extraction) + M3 (CLIP image embeddings,
+# zero-shot labels, VLM descriptions) + M4 (BGE-M3 text embeddings, PGVector
+# text/image stores) + M5 (RAG retrieval/generation) + M6 (Streamlit UI)
+# runtime dependencies. No LangChain agent anywhere in this milestone -- see
+# [project.optional-dependencies].future for the pinned version reserved for
+# M7. torch is intentionally NOT pinned/installed here: this machine already
+# has a CUDA build (torch==2.14.1+cu126) installed by the user outside pip's
+# normal resolution; open-clip-torch is installed against it.
+dependencies = [
+    "pydantic==2.14.1",
+    "pydantic-settings==2.16.2",
+    "langchain-core==1.7.1",
+    "langchain-ollama==1.1.0",
+    "langchain-openai==1.7.3",
+    "pymupdf==2.0",
+    "psycopg[binary]==3.3.6",
+    "httpx==0.28.1",
+    "llama-index-core==0.14.25",
+    "llama-index-readers-file==0.7.0",
+    "llama-index-embeddings-huggingface==0.8.0",
+    "llama-index-vector-stores-postgres==0.9.0",
+    "sentence-transformers==6.2.0",
+    "open-clip-torch==3.3.0",
+    "pyyaml==6.0.3",
+    "streamlit==1.66.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "ruff==0.17.3",
+    "reportlab==5.1.0",
+    "pillow==13.0.0",
+]
+# Reserved, pinned version for the fixed project stack (CLAUDE.md). Not installed
+# and not imported anywhere up to this milestone -- introduced starting with M7
+# (agent).
+future = [
+    "langchain==1.4.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["app", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N"]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "ui"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "integration: requires the Docker Compose db service to be up and reachable",
+]
+
+[tool.coverage.run]
+source = ["app"]

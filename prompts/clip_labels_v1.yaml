@@ -1,0 +1,28 @@
+# Zero-shot CLIP category labels (English -- MobileCLIP's text tower is
+# English-only, see app/images/clip_encoder.py). Each maps to a French
+# category name used in the extracted image metadata (kind_fr).
+#
+# Do not tune these to "look good" on any one document: report confusions
+# honestly instead of adding/removing labels to fix them after the fact.
+version: 1
+labels:
+  - text: "a technical diagram or schematic"
+    category_fr: "schéma"
+  - text: "an exploded view drawing of a machine"
+    category_fr: "vue éclatée"
+  - text: "a photo of an industrial pump"
+    category_fr: "photo"
+  - text: "a safety warning pictogram"
+    category_fr: "pictogramme de sécurité"
+  - text: "a wiring diagram"
+    category_fr: "schéma électrique"
+  - text: "a performance curve chart"
+    category_fr: "courbe"
+  - text: "a dimension drawing with measurements"
+    category_fr: "plan coté"
+  - text: "a nameplate or label"
+    category_fr: "plaque signalétique"
+  - text: "a logo"
+    category_fr: "logo"
+  - text: "a QR code or barcode"
+    category_fr: "code"

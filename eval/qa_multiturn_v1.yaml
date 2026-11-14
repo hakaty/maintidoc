@@ -1,0 +1,49 @@
+# 6 conversations courtes (2-3 tours) avec des relances qui font référence à
+# la réponse précédente -- pour vérifier que la mémoire de session permet à
+# l'agent de comprendre une relance sans répéter tout le contexte. Les pages
+# attendues sont par tour (turn). Évalué par eval/run_qa.py --multiturn.
+#
+# Valeurs observées sur ce document, pas des garanties générales.
+
+conversations:
+  - id: mt01
+    turns:
+      - question: "Que faut-il faire si le RCD s'est déclenché ?"
+        expected_pages: [35]
+      - question: "Et si ça ne suffit pas, quelle est l'étape suivante ?"
+        expected_pages: [35]
+
+  - id: mt02
+    turns:
+      - question: "Quelle classe de résistance à la compression le béton doit-il avoir ?"
+        expected_pages: [20]
+      - question: "À quelle section du manuel ça correspond ?"
+        expected_pages: [20]
+
+  - id: mt03
+    turns:
+      - question: "À quelle température ambiante l'unité emballée doit-elle être stockée ?"
+        expected_pages: [9]
+      - question: "Et pour une unité non emballée, y a-t-il une différence ?"
+        expected_pages: [9]
+
+  - id: mt04
+    turns:
+      - question: "Que risque un moteur monophasé après avoir refroidi ?"
+        expected_pages: [26]
+      - question: "Pourquoi est-ce dangereux exactement ?"
+        expected_pages: [26]
+
+  - id: mt05
+    turns:
+      - question: "Quel est l'indice de protection du moteur ?"
+        expected_pages: [40]
+      - question: "Et celui de l'électropompe, c'est le même ?"
+        expected_pages: [40]
+
+  - id: mt06
+    turns:
+      - question: "Où trouver les informations sur la garantie de l'unité ?"
+        expected_pages: [45]
+      - question: "Donc je ne trouverai pas la durée exacte dans ce manuel ?"
+        expected_pages: [45]

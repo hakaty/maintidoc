@@ -1,0 +1,26 @@
+# Modèle vide : ajoutez vos propres questions ici, elles seront prises en
+# compte automatiquement par eval/run_qa.py si ce fichier existe et contient
+# au moins une question (sinon il est simplement ignoré).
+#
+# Champs :
+#   id             : identifiant unique (ex. "u01")
+#   group          : "base" (réponse attendue dans le manuel), "paraphrase",
+#                    "unanswerable" (pas de réponse dans le manuel) ou
+#                    "adversarial" (teste si les règles sont contournées)
+#   question       : la question, en français
+#   expected_pages : liste des pages où se trouve la réponse (laisser [] si
+#                    answerable=false)
+#   answerable     : true si le manuel contient la réponse, false sinon
+#   notes          : pourquoi vous attendez cette réponse (page, section...)
+#
+# Exemple (à décommenter et adapter) :
+#
+# questions:
+#   - id: u01
+#     group: base
+#     question: "Votre question ici ?"
+#     expected_pages: [12]
+#     answerable: true
+#     notes: "Section X, page 12 : ..."
+
+questions: []

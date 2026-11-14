@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MaintiDoc — Logo, boutons et composants</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 18px;border-radius:10px;font:600 15px/1 'IBM Plex Sans',sans-serif;cursor:pointer;border:1px solid transparent;white-space:nowrap;box-sizing:border-box}
+.btn-primary{background:#0B5C7A;color:#FFFFFF}
+.btn-secondary{background:#FFFFFF;border-color:#8A96A3;color:#0F1B2D}
+.btn-ghost{background:transparent;color:#334155}
+.btn-danger{background:#B42318;color:#FFFFFF}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap}
+.lab{font-size:13px;color:#5B6675}
+.h2{margin:0;font-size:24px;line-height:32px;font-weight:600}
+.over{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#5B6675}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+.spin{width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block}
+.sw{display:flex;flex-direction:column;gap:8px}
+.swc{height:64px;border-radius:12px;border:1px solid #E1E6EB}
+td{padding:10px 8px;vertical-align:middle}
+th{font-size:13px;font-weight:600;color:#5B6675;text-align:left;padding:0 8px 8px}
+</style>
+</head>
+<body>
+
+<div style="width: 1440px; height: 1560px; box-sizing: border-box; padding: 48px 56px; background: #F4F6F8; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #0F1B2D; display: flex; flex-direction: column; gap: 32px;">
+
+  <header style="display: flex; flex-direction: column; gap: 6px;">
+    <h1 style="margin: 0; font-size: 32px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em;">Système MaintiDoc</h1>
+    <p style="margin: 0; font-size: 16px; color: #5B6675;">Style : interface d'IA conversationnelle, sobre et précise. Bleu de confiance, orange sécurité, aucun dégradé violet.</p>
+  </header>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px;">
+    <!-- Logo -->
+    <section style="background: #FFFFFF; border: 1px solid #E1E6EB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+      <h2 class="h2">Logo</h2>
+      <div style="display: flex; align-items: center; gap: 32px; flex-wrap: wrap;">
+        <svg width="96" height="96" viewBox="0 0 40 40" role="img" aria-label="Symbole MaintiDoc"><rect width="40" height="40" rx="10" fill="#0B5C7A"/><path d="M13 9h10l6 6v16H13z" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/><path d="M23 9v6h6" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/><path d="M21 19.5l3.9 2.25v4.5L21 28.5l-3.9-2.25v-4.5z" fill="#F5A524"/><circle cx="21" cy="24" r="1.4" fill="#0B5C7A"/></svg>
+        <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#0B5C7A"/><path d="M13 9h10l6 6v16H13z" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/><path d="M23 9v6h6" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/><path d="M21 19.5l3.9 2.25v4.5L21 28.5l-3.9-2.25v-4.5z" fill="#F5A524"/><circle cx="21" cy="24" r="1.4" fill="#0B5C7A"/></svg>
+        <svg width="24" height="24" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#0B5C7A"/><path d="M13 9h10l6 6v16H13z" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round"/><path d="M21 19.5l3.9 2.25v4.5L21 28.5l-3.9-2.25v-4.5z" fill="#F5A524"/></svg>
+        <span style="font-size: 32px; font-weight: 700; letter-spacing: -0.02em;">Mainti<span style="color: #0B5C7A;">Doc</span></span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 20px; border-radius: 12px; background: #0F1B2D;">
+        <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#FFFFFF"/><path d="M13 9h10l6 6v16H13z" fill="none" stroke="#0B5C7A" stroke-width="2" stroke-linejoin="round"/><path d="M23 9v6h6" fill="none" stroke="#0B5C7A" stroke-width="2" stroke-linejoin="round"/><path d="M21 19.5l3.9 2.25v4.5L21 28.5l-3.9-2.25v-4.5z" fill="#F5A524"/><circle cx="21" cy="24" r="1.4" fill="#FFFFFF"/></svg>
+        <span style="font-size: 24px; font-weight: 700; color: #FFFFFF;">Mainti<span style="color: #7CC4DD;">Doc</span></span>
+        <span style="margin-left: auto; font-size: 13px; color: #B7C2CC;">Version sur fond sombre</span>
+      </div>
+      <p style="margin: 0; font-size: 14px; line-height: 22px; color: #334155;">Une page de manuel (le document) et un écrou hexagonal orange (la maintenance). En dessous de 24 px, la page se simplifie : sans coin plié ni trou d'écrou. Marge libre autour du logo : au moins la moitié de sa hauteur.</p>
+    </section>
+
+    <!-- Couleurs -->
+    <section style="background: #FFFFFF; border: 1px solid #E1E6EB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+      <h2 class="h2">Couleurs</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;">
+        <div class="sw"><div class="swc" style="background: #0B5C7A; border-color: #0B5C7A;"></div><span style="font-size: 14px; font-weight: 600;">Pétrole</span><span class="lab mono">#0B5C7A</span><span class="lab">Actions · texte blanc 7,4:1</span></div>
+        <div class="sw"><div class="swc" style="background: #F5A524; border-color: #F5A524;"></div><span style="font-size: 14px; font-weight: 600;">Sécurité</span><span class="lab mono">#F5A524</span><span class="lab">Pictos, alertes · fond seulement</span></div>
+        <div class="sw"><div class="swc" style="background: #0F1B2D; border-color: #0F1B2D;"></div><span style="font-size: 14px; font-weight: 600;">Encre</span><span class="lab mono">#0F1B2D</span><span class="lab">Texte · 17,3:1 sur blanc</span></div>
+        <div class="sw"><div class="swc" style="background: #5B6675; border-color: #5B6675;"></div><span style="font-size: 14px; font-weight: 600;">Secondaire</span><span class="lab mono">#5B6675</span><span class="lab">Aide · 5,8:1 sur blanc</span></div>
+        <div class="sw"><div class="swc" style="background: #F4F6F8;"></div><span style="font-size: 14px; font-weight: 600;">Fond</span><span class="lab mono">#F4F6F8</span><span class="lab">Arrière-plan des pages</span></div>
+        <div class="sw"><div class="swc" style="background: #8A96A3; border-color: #8A96A3;"></div><span style="font-size: 14px; font-weight: 600;">Contour</span><span class="lab mono">#8A96A3</span><span class="lab">Champs, boutons · 3:1</span></div>
+        <div class="sw"><div class="swc" style="background: #157347; border-color: #157347;"></div><span style="font-size: 14px; font-weight: 600;">Succès</span><span class="lab mono">#157347</span><span class="lab">Vérifié, en ligne</span></div>
+        <div class="sw"><div class="swc" style="background: #B42318; border-color: #B42318;"></div><span style="font-size: 14px; font-weight: 600;">Erreur</span><span class="lab mono">#B42318</span><span class="lab">Erreurs · 6,6:1 sur blanc</span></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Boutons -->
+  <section style="background: #FFFFFF; border: 1px solid #E1E6EB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <h2 class="h2">Boutons et états</h2>
+      <span class="lab">Un seul bouton principal par écran · hauteur 44 px minimum · transition 150 ms · appui à 97 %</span>
+    </div>
+    <table style="border-collapse: collapse; width: 100%;">
+      <thead><tr><th scope="col"></th><th scope="col">Normal</th><th scope="col">Survol</th><th scope="col">Appui</th><th scope="col">Focus clavier</th><th scope="col">Chargement</th><th scope="col">Désactivé</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row" style="padding: 10px 8px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 15px; color: #0F1B2D;">Principal</span><span class="lab" style="font-weight: 400;">Envoyer, Demander</span></span></th>
+          <td><button class="btn btn-primary">Envoyer</button></td>
+          <td><button class="btn btn-primary" style="background: #094B64;">Envoyer</button></td>
+          <td><button class="btn btn-primary" style="background: #083B4F; transform: scale(0.97);">Envoyer</button></td>
+          <td><button class="btn btn-primary" style="outline: 3px solid #0B5C7A; outline-offset: 2px;">Envoyer</button></td>
+          <td><button class="btn btn-primary" aria-busy="true" style="opacity: 0.85;"><span class="spin" aria-hidden="true"></span>Envoi…</button></td>
+          <td><button class="btn btn-primary" disabled style="opacity: 0.45; cursor: not-allowed;">Envoyer</button></td>
+        </tr>
+        <tr>
+          <th scope="row" style="padding: 10px 8px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 15px; color: #0F1B2D;">Secondaire</span><span class="lab" style="font-weight: 400;">Voir le tableau, Importer</span></span></th>
+          <td><button class="btn btn-secondary">Voir le tableau</button></td>
+          <td><button class="btn btn-secondary" style="background: #F4F6F8;">Voir le tableau</button></td>
+          <td><button class="btn btn-secondary" style="background: #EDF1F4; transform: scale(0.97);">Voir le tableau</button></td>
+          <td><button class="btn btn-secondary" style="outline: 3px solid #0B5C7A; outline-offset: 2px;">Voir le tableau</button></td>
+          <td><button class="btn btn-secondary" aria-busy="true"><span class="spin" aria-hidden="true"></span>Chargement…</button></td>
+          <td><button class="btn btn-secondary" disabled style="opacity: 0.45; cursor: not-allowed;">Voir le tableau</button></td>
+        </tr>
+        <tr>
+          <th scope="row" style="padding: 10px 8px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 15px; color: #0F1B2D;">Discret</span><span class="lab" style="font-weight: 400;">Copier, Prendre une photo</span></span></th>
+          <td><button class="btn btn-ghost">Copier</button></td>
+          <td><button class="btn btn-ghost" style="background: #EDF1F4; color: #0F1B2D;">Copier</button></td>
+          <td><button class="btn btn-ghost" style="background: #E1E6EB; transform: scale(0.97);">Copier</button></td>
+          <td><button class="btn btn-ghost" style="outline: 3px solid #0B5C7A; outline-offset: 2px;">Copier</button></td>
+          <td><button class="btn btn-ghost" style="color: #157347;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Copié</button></td>
+          <td><button class="btn btn-ghost" disabled style="opacity: 0.45; cursor: not-allowed;">Copier</button></td>
+        </tr>
+        <tr>
+          <th scope="row" style="padding: 10px 8px;"><span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 15px; color: #0F1B2D;">Danger</span><span class="lab" style="font-weight: 400;">Supprimer le document</span></span></th>
+          <td><button class="btn btn-danger">Supprimer</button></td>
+          <td><button class="btn btn-danger" style="background: #912018;">Supprimer</button></td>
+          <td><button class="btn btn-danger" style="background: #7A1A14; transform: scale(0.97);">Supprimer</button></td>
+          <td><button class="btn btn-danger" style="outline: 3px solid #B42318; outline-offset: 2px;">Supprimer</button></td>
+          <td><button class="btn btn-danger" aria-busy="true" style="opacity: 0.85;"><span class="spin" aria-hidden="true"></span>Suppression…</button></td>
+          <td><button class="btn btn-danger" disabled style="opacity: 0.45; cursor: not-allowed;">Supprimer</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 16px; border-top: 1px solid #EDF1F4;">
+      <span class="over">Tailles</span>
+      <button class="btn btn-primary" style="height: 36px; padding: 0 14px; font-size: 14px;">Petit · 36</button>
+      <button class="btn btn-primary">Moyen · 44</button>
+      <button class="btn btn-primary" style="height: 52px; padding: 0 24px; font-size: 16px;">Grand · 52</button>
+      <span class="over" style="margin-left: 24px;">Icône seule</span>
+      <button class="btn btn-ghost" aria-label="Joindre une photo" style="width: 44px; padding: 0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      <button class="btn btn-primary" aria-label="Envoyer" style="width: 44px; padding: 0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <span class="lab">toujours un aria-label</span>
+    </div>
+  </section>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px;">
+    <!-- Retours -->
+    <section style="background: #FFFFFF; border: 1px solid #E1E6EB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+      <h2 class="h2">Réponses et retours</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <span class="chip" style="background: #E8F5EE; color: #157347;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Réponse vérifiée · 2 sources</span>
+        <span class="chip" style="background: #EDF1F4; color: #334155;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h0"/></svg>Pas de source fiable</span>
+        <span class="chip mono" style="background: #E5F0F4; color: #0B5C7A; border-radius: 6px;">p. 26</span>
+      </div>
+      <div role="note" style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #FFF6E5; border: 1px solid #F5A524;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7A4100" stroke-width="2" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17h0" stroke-linecap="round"/></svg>
+        <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 14px; font-weight: 700; color: #7A4100;">Sécurité</span><span style="font-size: 14px; line-height: 21px; color: #5C3300;">[Consigne de sécurité citée telle quelle du manuel] <span class="mono" style="font-weight: 600;">[p. 26]</span></span></span>
+      </div>
+      <div style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #F4F6F8; border: 1px solid #E1E6EB;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex: none;"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 14px; font-weight: 700;">Le manuel ne répond pas à cette question</span><span style="font-size: 14px; line-height: 21px; color: #334155;">Essayez avec d'autres mots, ou le nom exact d'une pièce.</span></span>
+      </div>
+      <div role="alert" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #FEF3F2; border: 1px solid #B42318;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B42318" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex: none;"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h0"/></svg>
+        <span style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 14px; font-weight: 700; color: #912018;">Ollama ne répond pas</span><span style="font-size: 14px; color: #334155;">Lancez Ollama, puis réessayez. <span class="mono" style="font-size: 13px;">ollama serve</span></span></span>
+        <button class="btn btn-secondary" style="height: 36px; padding: 0 14px; font-size: 14px;">Réessayer</button>
+      </div>
+    </section>
+
+    <!-- Champs + typo -->
+    <section style="background: #FFFFFF; border: 1px solid #E1E6EB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+      <h2 class="h2">Champs et typographie</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label for="c1" style="font-size: 14px; font-weight: 600;">Question</label>
+          <input id="c1" placeholder="Ex. : couple de serrage ?" style="height: 44px; box-sizing: border-box; padding: 0 14px; border: 1px solid #8A96A3; border-radius: 10px; font: 400 16px/1 'IBM Plex Sans', sans-serif;">
+          <span class="lab">Normal</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label for="c2" style="font-size: 14px; font-weight: 600;">Question</label>
+          <input id="c2" value="Pression maximale" style="height: 44px; box-sizing: border-box; padding: 0 14px; border: 2px solid #0B5C7A; border-radius: 10px; font: 400 16px/1 'IBM Plex Sans', sans-serif; outline: 3px solid #CDE3EB;">
+          <span class="lab">Focus</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; grid-column: span 2;">
+          <label for="c3" style="font-size: 14px; font-weight: 600;">Manuel PDF</label>
+          <input id="c3" value="notice.docx" aria-invalid="true" aria-describedby="c3e" style="height: 44px; box-sizing: border-box; padding: 0 14px; border: 2px solid #B42318; border-radius: 10px; font: 400 16px/1 'IBM Plex Sans', sans-serif;">
+          <span id="c3e" style="font-size: 13px; color: #B42318; font-weight: 600;">Ce fichier n'est pas un PDF. Choisissez un fichier .pdf de 50 Mo maximum.</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; padding-top: 16px; border-top: 1px solid #EDF1F4;">
+        <span style="font-size: 32px; line-height: 40px; font-weight: 700;">Titre de page 32</span>
+        <span style="font-size: 24px; line-height: 32px; font-weight: 600;">Titre de section 24</span>
+        <span style="font-size: 18px; line-height: 26px; font-weight: 600;">Titre de carte 18</span>
+        <span style="font-size: 16px; line-height: 26px;">Texte courant 16 — IBM Plex Sans, interligne 1,6</span>
+        <span style="font-size: 14px; line-height: 21px; color: #334155;">Texte secondaire 14</span>
+        <span class="mono" style="font-size: 14px; font-weight: 600;">p. 37 · 0,96 · 14,9 s — JetBrains Mono (pages, scores, temps)</span>
+      </div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MaintiDoc — Assistant</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F6F8}
+a{color:#0B5C7A}a:hover{color:#094B64}
+.skip{position:absolute;left:-9999px;top:8px;background:#0F1B2D;color:#FFFFFF;padding:10px 14px;border-radius:8px;z-index:10}
+.skip:focus{left:16px;color:#FFFFFF}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 18px;border-radius:10px;font:600 15px/1 'IBM Plex Sans',sans-serif;cursor:pointer;border:1px solid transparent;transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .1s ease;text-decoration:none;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn:focus-visible,.navlink:focus-visible,.chipbtn:focus-visible,.cite:focus-visible,.seg:focus-visible{outline:3px solid #0B5C7A;outline-offset:2px}
+.btn-primary{background:#0B5C7A;color:#FFFFFF;box-shadow:0 1px 2px rgba(11,92,122,.3)}
+.btn-primary:hover{background:#094B64;color:#FFFFFF}
+.btn-secondary{background:#FFFFFF;border-color:#8A96A3;color:#0F1B2D}
+.btn-secondary:hover{background:#F4F6F8;color:#0F1B2D}
+.btn-ghost{background:transparent;color:#334155}
+.btn-ghost:hover{background:#EDF1F4;color:#0F1B2D}
+.btn-sm{height:36px;padding:0 14px;font-size:14px}
+.btn-icon{width:44px;padding:0}
+.btn-sm.btn-icon{width:36px}
+.navlink{display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:10px;color:#334155;text-decoration:none;font-size:15px;font-weight:500;transition:background-color .15s ease}
+.navlink:hover{background:#EDF1F4;color:#0F1B2D}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap}
+.chipbtn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;border:1px solid #8A96A3;background:#FFFFFF;color:#334155;font:500 14px/1 'IBM Plex Sans',sans-serif;cursor:pointer;transition:background-color .15s ease,border-color .15s ease}
+.chipbtn:hover{background:#E5F0F4;border-color:#0B5C7A;color:#0B5C7A}
+.cite{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:6px;background:#E5F0F4;color:#0B5C7A;font:600 13px/1 'JetBrains Mono',monospace;vertical-align:1px;text-decoration:none}
+.cite:hover{background:#D3E6EE;color:#094B64}
+.seg{height:36px;padding:0 16px;border-radius:8px;border:none;font:600 14px/1 'IBM Plex Sans',sans-serif;cursor:pointer;transition:background-color .15s ease}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.over{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#5B6675}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.spin{width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;display:inline-block;flex:none}
+.skel{background:#E7ECF0;border-radius:6px;animation:pulse 1.4s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div style="min-height: 1000px; display: flex; flex-wrap: wrap; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 16px; color: #0F1B2D; background: #F4F6F8; position: relative;">
+  <a href="#contenu" class="skip">Aller au contenu</a>
+
+  <nav aria-label="Navigation principale" style="flex: 1 1 256px; max-width: 100%; box-sizing: border-box; background: #FFFFFF; border-right: 1px solid #E1E6EB; padding: 24px 16px; display: flex; flex-direction: column; gap: 24px;">
+    <a href="#" aria-label="MaintiDoc, accueil" style="display: flex; align-items: center; gap: 12px; padding: 0 8px; text-decoration: none; color: #0F1B2D;">
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#0B5C7A"/><path d="M13 9h10l6 6v16H13z" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/><path d="M23 9v6h6" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/><path d="M21 19.5l3.9 2.25v4.5L21 28.5l-3.9-2.25v-4.5z" fill="#F5A524"/><circle cx="21" cy="24" r="1.4" fill="#0B5C7A"/></svg>
+      <span style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 18px; font-weight: 700; letter-spacing: -0.01em;">Mainti<span style="color: #0B5C7A;">Doc</span></span>
+        <span style="font-size: 13px; color: #5B6675;">Manuel Lowara · 48 pages</span>
+      </span>
+    </a>
+
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <a href="#" class="navlink" aria-current="page" style="background: #E5F0F4; color: #0B5C7A; font-weight: 600;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Assistant</a>
+      <a href="2-recherche-image.html" class="navlink">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>Recherche par image</a>
+      <a href="3-document.html" class="navlink">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Document</a>
+    </div>
+
+    <button class="btn btn-secondary" style="width: 100%;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nouvelle conversation</button>
+
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <span class="over" style="padding: 0 12px 4px;">Récentes</span>
+      <a href="#" class="navlink" style="height: 40px; font-size: 14px;">Pictogramme atmosphère explosive</a>
+      <a href="#" class="navlink" style="height: 40px; font-size: 14px;">Moteur monophasé refroidi</a>
+    </div>
+
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 12px; background: #F4F6F8;">
+      <span class="over">État des services</span>
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 14px;"><span class="dot" style="background: #157347;"></span>Base de données · en ligne</span>
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 14px;"><span class="dot" style="background: #157347;"></span>Qwen 7B · Ollama · en ligne</span>
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 14px;"><span class="dot" style="background: #157347;"></span>GPU RTX 3060</span>
+      <a href="#" class="btn btn-ghost btn-sm" style="justify-content: flex-start; padding: 0 8px; margin: 0 -8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Réglages avancés</a>
+    </div>
+  </nav>
+
+  <main id="contenu" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 40px; border-bottom: 1px solid #E1E6EB; background: #FFFFFF;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <h1 style="margin: 0; font-size: 32px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em;">Assistant</h1>
+        <p style="margin: 0; font-size: 16px; line-height: 24px; color: #5B6675;">Réponses tirées du manuel, avec la page de chaque information.</p>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+        <div role="group" aria-label="Mode de réponse" style="display: flex; padding: 4px; gap: 4px; border-radius: 12px; background: #EDF1F4;">
+          <button class="seg" aria-pressed="true" style="background: #FFFFFF; color: #0F1B2D; box-shadow: 0 1px 2px rgba(15,27,45,0.1);">Simple</button>
+          <button class="seg" aria-pressed="false" style="background: transparent; color: #334155;">Agent</button>
+        </div>
+        <span style="font-size: 13px; color: #5B6675;">Simple : le plus fiable sur ce manuel (80,8 % de bonnes pages)</span>
+      </div>
+    </header>
+
+    <section aria-label="Conversation" style="flex: 1 1 auto; padding: 32px 40px; display: flex; flex-direction: column; align-items: center;">
+      <div style="width: 100%; max-width: 820px; display: flex; flex-direction: column; gap: 24px;">
+
+        <div style="align-self: flex-end; max-width: 600px; padding: 12px 16px; border-radius: 16px 16px 4px 16px; background: #0B5C7A; color: #FFFFFF; font-size: 16px; line-height: 24px;">Quel pictogramme de sécurité, parmi les symboles complémentaires, signale un risque d'atmosphère explosive ?</div>
+
+        <article aria-label="Réponse de MaintiDoc" style="background: #FFFFFF; border: 1px solid #E1E6EB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 16px rgba(15,27,45,0.05);">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+            <span style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600;">
+              <svg width="28" height="28" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#0B5C7A"/><path d="M13 9h10l6 6v16H13z" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linejoin="round"/><path d="M21 19.5l3.9 2.25v4.5L21 28.5l-3.9-2.25v-4.5z" fill="#F5A524"/></svg>MaintiDoc</span>
+            <span class="chip" style="background: #E8F5EE; color: #157347;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Réponse vérifiée · 1 source</span>
+          </div>
+          <p style="margin: 0; font-size: 16px; line-height: 26px; max-width: 680px;">Le pictogramme qui signale un risque d'atmosphère explosive est le symbole « Risque d'atmosphère explosive », présenté dans le tableau des symboles complémentaires <a href="#source-1" class="cite" aria-label="Source : page 5, tableau">p. 5 · tableau</a></p>
+
+          <div id="source-1" style="display: flex; flex-direction: column; gap: 8px;">
+            <span class="over">Source</span>
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 16px; border: 1px solid #E1E6EB; border-radius: 12px; background: #FAFBFC;">
+              <div style="width: 56px; height: 56px; border-radius: 10px; background: #FFF6E5; display: flex; align-items: center; justify-content: center;">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#7A4100" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2z"/><text x="12" y="18" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="6" font-weight="700" fill="#7A4100" stroke="none">EX</text></svg>
+              </div>
+              <div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                <span class="mono" style="font-size: 16px; line-height: 22px; font-weight: 600;">p. 5</span>
+                <span style="font-size: 14px; color: #334155;">Tableau — Symboles complémentaires</span>
+                <span style="font-size: 13px; color: #5B6675;">Symbole · Description · …</span>
+              </div>
+              <button class="btn btn-secondary btn-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>Voir le tableau</button>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid #EDF1F4;">
+            <span style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: #5B6675;"><span>Recherche <span class="mono">10,7 s</span></span><span>Rédaction <span class="mono">8,9 s</span></span><span>Qwen 2.5 7B · Ollama</span></span>
+            <span style="display: flex; gap: 4px;">
+              <button class="btn btn-ghost btn-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>Copier</button>
+              <button class="btn btn-ghost btn-sm btn-icon" aria-label="Réponse utile">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10v10H4V10zM7 10l4-7c1.5 0 2.5 1 2.2 2.6L12.6 9H19a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 20H7"/></svg></button>
+              <button class="btn btn-ghost btn-sm btn-icon" aria-label="Réponse pas utile">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: rotate(180deg);"><path d="M7 10v10H4V10zM7 10l4-7c1.5 0 2.5 1 2.2 2.6L12.6 9H19a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 20H7"/></svg></button>
+            </span>
+          </div>
+        </article>
+
+        <div style="align-self: flex-end; max-width: 600px; padding: 12px 16px; border-radius: 16px 16px 4px 16px; background: #0B5C7A; color: #FFFFFF; font-size: 16px; line-height: 24px;">Que risque un moteur monophasé après avoir refroidi ?</div>
+
+        <article aria-busy="true" aria-label="Réponse en préparation" style="background: #FFFFFF; border: 1px solid #E1E6EB; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+          <div role="status" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+            <span style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #157347; font-weight: 600;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Recherche dans le manuel</span>
+            <span aria-hidden="true" style="width: 24px; height: 2px; background: #C9D2DA;"></span>
+            <span style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #0B5C7A; font-weight: 600;"><span class="spin" aria-hidden="true"></span>Vérification des sources</span>
+            <span aria-hidden="true" style="width: 24px; height: 2px; background: #C9D2DA;"></span>
+            <span style="font-size: 14px; color: #5B6675;">Rédaction</span>
+          </div>
+          <div aria-hidden="true" style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="skel" style="height: 14px; width: 92%;"></div>
+            <div class="skel" style="height: 14px; width: 78%;"></div>
+            <div class="skel" style="height: 56px; width: 100%; border-radius: 12px;"></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <footer style="padding: 16px 40px 32px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <div style="width: 100%; max-width: 820px; display: flex; flex-wrap: wrap; gap: 8px;">
+        <button class="chipbtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>Classe de résistance du béton ?</button>
+        <button class="chipbtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2z"/></svg>Pictogramme atmosphère explosive ?</button>
+        <button class="chipbtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h0"/></svg>Moteur monophasé refroidi ?</button>
+      </div>
+      <form style="width: 100%; max-width: 820px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid #8A96A3; border-radius: 16px; background: #FFFFFF; box-shadow: 0 4px 16px rgba(15,27,45,0.06);">
+        <button type="button" class="btn btn-ghost btn-icon" aria-label="Joindre une photo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+        <input aria-label="Votre question sur le manuel" placeholder="Posez votre question sur le manuel…" style="flex: 1 1 auto; min-width: 0; height: 44px; border: none; outline: none; font: 400 16px/1 'IBM Plex Sans', sans-serif; color: #0F1B2D; background: transparent;">
+        <button type="submit" class="btn btn-primary">Envoyer
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </form>
+      <span style="font-size: 13px; color: #5B6675;">Chaque réponse cite une page du manuel. Sans source fiable, l'assistant le dit.</span>
+    </footer>
+  </main>
+</div>
+</body>
+</html>
