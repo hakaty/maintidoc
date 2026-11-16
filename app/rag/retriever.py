@@ -15,6 +15,7 @@ from pathlib import Path
 from llama_index.core.schema import BaseNode
 from llama_index.core.vector_stores.types import (
     FilterCondition,
+    FilterOperator,
     MetadataFilter,
     MetadataFilters,
     VectorStoreQuery,
@@ -151,7 +152,7 @@ def _query_text_store(
     k: int,
     mode: str,
     settings: Settings,
-    content_type: str | None = None,
+    content_type: str | list[str] | None = None,
     pdf_sha256: str | None = None,
 ) -> tuple[list[BaseNode], list[float]]:
     embedder = get_query_embedder(settings)
@@ -160,7 +161,14 @@ def _query_text_store(
     filters = []
     if pdf_sha256:
         filters.append(MetadataFilter(key="pdf_sha256", value=pdf_sha256))
-    if content_type:
+    if isinstance(content_type, list):
+        # M7.4 section 2.1 follow-up: pictogram descriptions can now live in
+        # either an "image_description" node OR a "table_row" cell -- a
+        # search_figures/search_tables call must match either, not just one.
+        filters.append(
+            MetadataFilter(key="content_type", value=content_type, operator=FilterOperator.IN)
+        )
+    elif content_type:
         filters.append(MetadataFilter(key="content_type", value=content_type))
     metadata_filters = (
         MetadataFilters(filters=filters, condition=FilterCondition.AND) if filters else None
@@ -183,7 +191,7 @@ def retrieve(
     k: int | None = None,
     mode: str = "hybrid",
     settings: Settings | None = None,
-    content_type: str | None = None,
+    content_type: str | list[str] | None = None,
     pdf_sha256: str | None = None,
 ) -> RetrievalResult:
     """French semantic search over the text index (text/table/image_description).

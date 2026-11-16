@@ -579,6 +579,83 @@ def test_suggestions_are_verified_in_default_mode() -> None:
     assert all(status == "verified" for status in statuses.values()), statuses
 
 
+@pytest.mark.integration
+def test_app_still_renders_every_page_when_pyarrow_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M7.4 follow-up: on this machine, Windows Application Control blocked
+    pyarrow's compiled lib.pyd, and st.write_stream()'s internal
+    is_dataframe_like() check imported pyarrow just to type-sniff a plain
+    text generator -- every streamed answer errored with "DLL load failed".
+    chat.py now streams via a manual st.empty()+markdown loop instead (never
+    imports pyarrow), and a repo-wide grep confirms no st.dataframe/st.table/
+    data_editor/chart call exists anywhere in ui/ (all tables are hand-built
+    markdown). This test makes pyarrow import fail on purpose (regardless of
+    whether the real OS block is active) and drives all 3 pages -- a Simple
+    question, an Agent question, and an image upload -- to prove the app
+    never needs it. Inside Docker (Linux, M7.5) pyarrow imports normally;
+    this only proves the app does not *require* it."""
+    import sys
+
+    for name in list(sys.modules):
+        if name == "pyarrow" or name.startswith("pyarrow."):
+            monkeypatch.delitem(sys.modules, name, raising=False)
+    monkeypatch.setitem(sys.modules, "pyarrow", None)
+
+    try:
+        at = AppTest.from_file(APP_PATH)
+        at.run(timeout=60)
+    except Exception as exc:  # pragma: no cover - network/model/DB unavailable
+        pytest.skip(f"Real stack unavailable: {exc}")
+    assert not at.exception
+
+    at.segmented_control[0].set_value("Simple").run(timeout=15)
+    at.chat_input[0].set_value(
+        "Quel pictogramme de securite, parmi les symboles complementaires, "
+        "signale un risque d'atmosphere explosive ?"
+    ).run(timeout=90)
+    assert not at.exception, f"Simple mode raised: {at.exception}"
+    joined = "\n".join(m.value for m in at.markdown)
+    assert "DLL load failed" not in joined
+    assert "Une erreur est survenue" not in joined
+    assert "Réponse vérifiée" in joined
+
+    at = AppTest.from_file(APP_PATH)
+    at.run(timeout=60)
+    at.segmented_control[0].set_value("Agent").run(timeout=15)
+    at.chat_input[0].set_value(
+        "Que risque un moteur monophase apres avoir refroidi ?"
+    ).run(timeout=90)
+    assert not at.exception, f"Agent mode raised: {at.exception}"
+    joined = "\n".join(m.value for m in at.markdown)
+    assert "DLL load failed" not in joined
+    assert "Une erreur est survenue" not in joined
+
+    at = AppTest.from_file(APP_PATH)
+    at.run(timeout=60)
+    at.switch_page(IMAGE_SEARCH_PAGE).run(timeout=APP_TIMEOUT)
+    assert not at.exception
+    import io
+
+    from PIL import Image as PILImage
+
+    buf = io.BytesIO()
+    PILImage.new("RGB", (64, 64), color=(200, 60, 60)).save(buf, format="PNG")
+    at.file_uploader[0].set_value(("query.png", buf.getvalue(), "image/png")).run(timeout=60)
+    assert not at.exception, f"Image search raised: {at.exception}"
+    joined = "\n".join(m.value for m in at.markdown)
+    assert "DLL load failed" not in joined
+    assert "Une erreur est survenue" not in joined
+
+    at = AppTest.from_file(APP_PATH)
+    at.run(timeout=60)
+    at.switch_page(DOCUMENT_PAGE).run(timeout=APP_TIMEOUT)
+    assert not at.exception
+    joined = "\n".join(m.value for m in at.markdown)
+    assert "DLL load failed" not in joined
+    assert "Une erreur est survenue" not in joined
+
+
 # --- Pixel-match task: bugs b/c/d/h regression tests -----------------------
 
 

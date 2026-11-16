@@ -112,6 +112,7 @@ PAGE_MAX_WIDTH_PX = 1120
 MATERIAL_ICONS = {
     "text": "description",
     "table": "table_chart",
+    "table_row": "table_chart",
     "image_description": "image",
     "safety": "warning",
 }
@@ -286,6 +287,10 @@ def build_css() -> str:
     display: flex;
     flex-direction: column;
     gap: 4px;
+    /* Section 8.4 fix: a fixed min-height keeps all 4 stat tiles the same
+       height even if one label wraps to 2 lines and the others don't. */
+    min-height: 96px;
+    justify-content: center;
 }}
 .md-stat-value {{
     font-family: {FONT_MONO};

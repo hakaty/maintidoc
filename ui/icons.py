@@ -79,6 +79,7 @@ ICON_TEXT_SM = (
 
 SOURCE_ROW_ICONS = {
     "table": ICON_TABLE_SM,
+    "table_row": ICON_TABLE_SM,
     "image_description": ICON_FIGURE_SM,
     "text": ICON_TEXT_SM,
 }

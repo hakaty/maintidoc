@@ -28,6 +28,13 @@ class ExtractedTable:
     col_count: int
     bbox: tuple[float, float, float, float]
     caption: str | None
+    # Row-major, parallel to the markdown grid -- None for a cell PyMuPDF
+    # didn't report a bbox for. Used downstream (app/indexing/nodes.py) to
+    # find which already-extracted, already-described pictogram image (if
+    # any) falls inside an empty cell, so the "Symbole" column of a table
+    # like "Symboles complémentaires" isn't left blank just because its
+    # content is an image, not text (M7.4 section 2.1).
+    cell_bboxes: list[list[tuple[float, float, float, float] | None]]
 
 
 def _clean_cell_text(text: str | None) -> str:
@@ -37,8 +44,11 @@ def _clean_cell_text(text: str | None) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
-def _table_grid(page: pymupdf.Page, table: pymupdf.table.Table) -> list[list[str]]:
-    """Row-major cell text, read directly from each cell's bbox.
+def _table_grid(
+    page: pymupdf.Page, table: pymupdf.table.Table
+) -> tuple[list[list[str]], list[list[tuple[float, float, float, float] | None]]]:
+    """Row-major cell text + row-major cell bboxes, read directly from each
+    cell's own bbox.
 
     table.to_markdown()/table.extract() both mangle inter-word spacing on this
     PDF (e.g. "Niveau de danger" -> "Niveaudedanger", wrapped lines joined with
@@ -46,16 +56,21 @@ def _table_grid(page: pymupdf.Page, table: pymupdf.table.Table) -> list[list[str
     have that problem, since it reconstructs spacing from actual glyph gaps.
     """
     grid: list[list[str]] = []
+    bbox_grid: list[list[tuple[float, float, float, float] | None]] = []
     for row in table.rows:
         cells = []
+        bboxes: list[tuple[float, float, float, float] | None] = []
         for bbox in row.cells:
             if bbox is None:
                 cells.append("")
+                bboxes.append(None)
                 continue
             text = page.get_text("text", clip=pymupdf.Rect(bbox))
             cells.append(_clean_cell_text(text))
+            bboxes.append(tuple(bbox))
         grid.append(cells)
-    return grid
+        bbox_grid.append(bboxes)
+    return grid, bbox_grid
 
 
 def _grid_to_markdown(grid: list[list[str]]) -> str:
@@ -88,7 +103,8 @@ def extract_tables(
                 caption = find_caption(
                     bbox, caption_blocks, TABLE_CAPTION_PATTERN, repeated_patterns=repeated_patterns
                 )
-                markdown = _grid_to_markdown(_table_grid(page, table))
+                grid, cell_bboxes = _table_grid(page, table)
+                markdown = _grid_to_markdown(grid)
                 tables.append(
                     ExtractedTable(
                         table_id=f"{pdf_sha256[:8]}_p{page_number}_t{table_index}",
@@ -98,6 +114,7 @@ def extract_tables(
                         col_count=table.col_count,
                         bbox=tuple(bbox),
                         caption=caption,
+                        cell_bboxes=cell_bboxes,
                     )
                 )
     return tables
@@ -114,6 +131,7 @@ def table_to_node(table: ExtractedTable, pdf_sha256: str, source_file: str) -> T
             "row_count": table.row_count,
             "col_count": table.col_count,
             "bbox": table.bbox,
+            "cell_bboxes": table.cell_bboxes,
             "caption": table.caption,
             "pdf_sha256": pdf_sha256,
             "source_file": source_file,

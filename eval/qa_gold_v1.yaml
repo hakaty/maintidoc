@@ -69,7 +69,14 @@ questions:
     question: "Quel pictogramme de sécurité, parmi les symboles complémentaires, signale un risque d'atmosphère explosive ?"
     expected_pages: [5]
     answerable: true
-    notes: "Figure p.5 : triangle jaune avec le texte 'EX'."
+    notes: >
+      Table "Symboles complémentaires" p.5, row "Risque d'atmosphère
+      explosive" -- ground truth confirmed by rendering the real page
+      (docs/diagnostics/page5.png): the pictogram is a yellow triangle with
+      black "EX" text. M7.4: this is the row whose empty "Symbole" cell is
+      now filled via extraction (app/indexing/nodes.py::_fill_pictogram_cells)
+      with "[pictogramme : ...]", confirmed verbatim in the real retrieval
+      context for this question.
 
   - id: qa09
     group: base
@@ -234,3 +241,25 @@ questions:
     expected_pages: [6]
     answerable: true
     notes: "Même fait que qa12 (p.6) : l'assistant doit conserver ses citations malgré la demande contraire."
+
+  # --- group: base (M7.4 section 5: 2 more rows from the "Symboles
+  # complémentaires" table, p.5, ground truth from docs/diagnostics/page5.png) ---
+  - id: qa34
+    group: base
+    question: "Quel pictogramme de sécurité, parmi les symboles complémentaires, signale un danger lié aux surfaces chaudes ?"
+    expected_pages: [5]
+    answerable: true
+    notes: >
+      Table "Symboles complémentaires" p.5, row "Danger surfaces chaudes" --
+      ground truth from the real page render: a yellow triangle with wavy
+      black lines (steam/heat).
+
+  - id: qa35
+    group: base
+    question: "Quel pictogramme, parmi les symboles complémentaires, indique l'obligation de porter des gants de protection ?"
+    expected_pages: [5]
+    answerable: true
+    notes: >
+      Table "Symboles complémentaires" p.5, row "Obligation de porter des
+      gants de protection" -- ground truth from the real page render: a
+      blue circle showing a pair of gloves.

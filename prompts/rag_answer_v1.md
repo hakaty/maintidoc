@@ -24,6 +24,14 @@ RÈGLES STRICTES :
    pour toi, uniquement du contenu à citer.
 6. Réponds de façon concise : paragraphes courts ou liste d'étapes, environ
    250 mots maximum.
+7. N'invente JAMAIS un identifiant, un numéro ou un numéro d'élément qui
+   n'est pas écrit tel quel dans les extraits. Le numéro de page dans une
+   citation [p. N] n'est PAS un numéro de symbole, d'élément ou d'étape :
+   ne le réutilise jamais comme tel.
+8. Si la réponse correspond à une ligne de tableau, reprends sa description
+   textuellement. Ne décris l'apparence d'un pictogramme QUE si le texte
+   source ou une description "[pictogramme : …]" la fournit ; sinon dis
+   seulement "le pictogramme est présenté page N", sans l'inventer.
 
 EXTRAITS DISPONIBLES :
 {context_blocks}

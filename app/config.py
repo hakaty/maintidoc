@@ -67,6 +67,14 @@ class Settings(BaseSettings):
     # see docs/05_rapport_rag.md section 0c.
     rag_expansion_skip_score: float = 0.65
 
+    # Image search rejection threshold (M7.4 section 3): calibrated on real
+    # data (51 perturbed manual figures vs. 6 locally-generated unrelated
+    # images -- see scripts/_calibrate_image_threshold.py), in-domain top1
+    # scores 0.78-0.99 vs. out-of-domain 0.40-0.71. 0.78 gives 100%
+    # out-of-domain rejection while keeping in-domain recall@3 at 96.1%
+    # (>= the 95% target). Never guessed.
+    image_min_score: float = 0.78
+
     agent_max_tool_calls: int = 4
     agent_timeout_seconds: float = 90.0
 

@@ -10,6 +10,8 @@ from typing import Any
 
 from llama_index.core.schema import TextNode
 
+MAX_PICTOGRAM_DESCRIPTION_CHARS = 90
+
 
 def text_node_id(pdf_sha256: str, content_type: str, original_id: str) -> str:
     """Deterministic id: re-running the build on the same document/node never
@@ -50,7 +52,195 @@ def _table_text(page: int, caption: str | None, markdown: str) -> str:
     return f"{header}\n{markdown}"
 
 
-def _table_node(raw: dict[str, Any], pdf_sha256: str, source_file: str) -> TextNode:
+def _bbox_overlap_ratio(
+    inner: tuple[float, float, float, float], outer: tuple[float, float, float, float]
+) -> float:
+    """Fraction of `inner`'s area that falls inside `outer` -- used to decide
+    whether a pictogram image "is" a given table cell, not just near it."""
+    ix0, iy0, ix1, iy1 = inner
+    ox0, oy0, ox1, oy1 = outer
+    overlap_x = max(0.0, min(ix1, ox1) - max(ix0, ox0))
+    overlap_y = max(0.0, min(iy1, oy1) - max(iy0, oy0))
+    overlap_area = overlap_x * overlap_y
+    inner_area = max(1e-6, (ix1 - ix0) * (iy1 - iy0))
+    return overlap_area / inner_area
+
+
+def _short_pictogram_description(description: str | None) -> str:
+    """Section 2.1 fix: a SHORT description for the table cell, not the full
+    (often 1-2 sentence) VLM description -- clamped at a word boundary."""
+    if not description:
+        return ""
+    text = description.strip().rstrip(".")
+    if len(text) <= MAX_PICTOGRAM_DESCRIPTION_CHARS:
+        return text
+    truncated = text[:MAX_PICTOGRAM_DESCRIPTION_CHARS].rsplit(" ", 1)[0]
+    return f"{truncated}…"
+
+
+ImageHint = tuple[tuple[float, float, float, float], "str | None", "str | None"]
+
+
+def _image_lookup_by_page(
+    raw_nodes: list[dict[str, Any]],
+) -> dict[int, list[ImageHint]]:
+    """page -> [(bbox, description, description_status), ...] for every
+    already-extracted, already-VLM-described image node. Built once and
+    reused for every table on that page (section 2.1 fix)."""
+    by_page: dict[int, list[ImageHint]] = {}
+    for raw in raw_nodes:
+        meta = raw.get("metadata", {})
+        if meta.get("content_type") != "image":
+            continue
+        bbox = meta.get("bbox")
+        page = meta.get("page")
+        if not bbox or page is None:
+            continue
+        by_page.setdefault(page, []).append(
+            (tuple(bbox), meta.get("description"), meta.get("description_status"))
+        )
+    return by_page
+
+
+def _unescape_cell(text: str) -> str:
+    return text.replace("\\|", "|")
+
+
+def _escape_cell(text: str) -> str:
+    return text.replace("|", "\\|")
+
+
+def _fill_pictogram_cells(
+    markdown: str,
+    cell_bboxes: list[list[list[float] | None]] | None,
+    page: int,
+    images_by_page: dict[int, list[ImageHint]],
+) -> str:
+    """Replace an EMPTY cell whose bbox contains an already-extracted,
+    already-described pictogram image with "[pictogramme : <short
+    description>]" (or "[pictogramme]" if the image has no usable
+    description) -- section 2.1 fix. Reuses the existing extraction +
+    VLM-description pipeline output (the pictograms on a page like
+    "Symboles complémentaires" are already separately extracted, embedded
+    images, each already described) instead of re-cropping/re-describing:
+    same result, no duplicate VLM calls. No-op if there's nothing to patch
+    (older processed data without cell_bboxes, or no matching image)."""
+    if not cell_bboxes:
+        return markdown
+    candidates = images_by_page.get(page, [])
+    if not candidates:
+        return markdown
+
+    lines = markdown.splitlines()
+    if len(lines) < 3:  # header + separator + at least one data row
+        return markdown
+
+    changed = False
+    out_lines = lines[:2]  # header + separator, unchanged
+    data_lines = lines[2:]
+    # cell_bboxes includes the header row (row 0); data rows start at index 1.
+    for row_index, line in enumerate(data_lines, start=1):
+        if row_index >= len(cell_bboxes):
+            out_lines.append(line)
+            continue
+        # Exactly one leading/trailing "|" (markdown table row delimiters),
+        # never `.strip("|")`: a row whose FIRST cell is empty (e.g. "||Risque
+        # ...|") would otherwise collapse that empty cell's own delimiter too,
+        # shifting every column left by one.
+        inner = line[1:-1] if line.startswith("|") and line.endswith("|") else line
+        cells = inner.split("|")
+        row_bboxes = cell_bboxes[row_index]
+        for col_index, cell_bbox in enumerate(row_bboxes):
+            if col_index >= len(cells) or cell_bbox is None:
+                continue
+            if _unescape_cell(cells[col_index]).strip():
+                continue  # cell already has real text, leave it alone
+            match = next(
+                (
+                    (desc, status)
+                    for bbox, desc, status in candidates
+                    if _bbox_overlap_ratio(bbox, tuple(cell_bbox)) > 0.5
+                ),
+                None,
+            )
+            if match is None:
+                continue
+            desc, status = match
+            short = _short_pictogram_description(desc) if status == "ok" else ""
+            placeholder = f"[pictogramme : {short}]" if short else "[pictogramme]"
+            cells[col_index] = _escape_cell(placeholder)
+            changed = True
+        out_lines.append("|" + "|".join(cells) + "|")
+
+    return "\n".join(out_lines) if changed else markdown
+
+
+def _table_row_nodes(
+    markdown: str,
+    page: int,
+    caption: str | None,
+    table_id: str,
+    pdf_sha256: str,
+    source_file: str,
+) -> list[TextNode]:
+    """Section 2.2 fix: ALSO index each row of a table as its own chunk
+    (title + header + that row + page), on top of the existing whole-table
+    chunk -- a row-level match (e.g. "Risque d'atmosphère explosive") scores
+    higher against a question about that one row than the whole 14-row
+    table competing against it as a single chunk."""
+    lines = markdown.splitlines()
+    if len(lines) < 3:
+        return []
+    header_line, _separator, *data_lines = lines
+    header = header_line.strip("|")
+    title = f"Tableau (page {page})"
+    if caption:
+        title += f" — {caption}"
+
+    nodes = []
+    for row_index, line in enumerate(data_lines):
+        row = line[1:-1] if line.startswith("|") and line.endswith("|") else line
+        if not row.strip("| "):
+            continue
+        text = f"{title}\n{header}\n{row}"
+        nodes.append(
+            TextNode(
+                id_=text_node_id(pdf_sha256, "table_row", f"{table_id}_r{row_index}"),
+                text=text,
+                metadata={
+                    "content_type": "table_row",
+                    "table_id": table_id,
+                    "page": page,
+                    "caption": caption,
+                    "row_index": row_index,
+                    "pdf_sha256": pdf_sha256,
+                    "source_file": source_file,
+                },
+            )
+        )
+    return nodes
+
+
+def _patched_table_markdown(
+    raw: dict[str, Any],
+    images_by_page: dict[int, list[ImageHint]]
+    | None,
+) -> str:
+    meta = raw["metadata"]
+    markdown = raw.get("text", "")
+    if images_by_page:
+        markdown = _fill_pictogram_cells(
+            markdown, meta.get("cell_bboxes"), meta["page"], images_by_page
+        )
+    return markdown
+
+
+def _table_node(
+    raw: dict[str, Any],
+    pdf_sha256: str,
+    source_file: str,
+    markdown: str,
+) -> TextNode:
     meta = raw["metadata"]
     metadata = _common_metadata(meta, pdf_sha256, source_file)
     metadata["content_type"] = "table"
@@ -61,7 +251,7 @@ def _table_node(raw: dict[str, Any], pdf_sha256: str, source_file: str) -> TextN
     original_id = meta.get("table_id") or raw["id_"]
     return TextNode(
         id_=text_node_id(pdf_sha256, "table", original_id),
-        text=_table_text(meta["page"], meta.get("caption"), raw.get("text", "")),
+        text=_table_text(meta["page"], meta.get("caption"), markdown),
         metadata=metadata,
     )
 
@@ -111,14 +301,24 @@ def _image_description_node(raw: dict[str, Any], pdf_sha256: str, source_file: s
 def build_text_index_nodes(
     raw_nodes: list[dict[str, Any]], pdf_sha256: str, source_file: str
 ) -> list[TextNode]:
-    """One TextNode per source text chunk / table / image, for the text index."""
+    """One TextNode per source text chunk / table (+ one per table ROW,
+    section 2.2) / image, for the text index."""
+    images_by_page = _image_lookup_by_page(raw_nodes)
     nodes: list[TextNode] = []
     for raw in raw_nodes:
         content_type = raw.get("metadata", {}).get("content_type")
         if content_type == "text":
             nodes.append(_text_chunk_node(raw, pdf_sha256, source_file))
         elif content_type == "table":
-            nodes.append(_table_node(raw, pdf_sha256, source_file))
+            markdown = _patched_table_markdown(raw, images_by_page)
+            nodes.append(_table_node(raw, pdf_sha256, source_file, markdown))
+            meta = raw["metadata"]
+            table_id = meta.get("table_id") or raw["id_"]
+            nodes.extend(
+                _table_row_nodes(
+                    markdown, meta["page"], meta.get("caption"), table_id, pdf_sha256, source_file
+                )
+            )
         elif content_type == "image":
             nodes.append(_image_description_node(raw, pdf_sha256, source_file))
     return nodes

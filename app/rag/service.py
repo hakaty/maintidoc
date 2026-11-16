@@ -29,7 +29,9 @@ REFUSAL_TEXT = "Le manuel ne contient pas d'information suffisante pour répondr
 
 CITATION_PATTERN = re.compile(r"\[p\.\s*(\d+)(?:\s*,\s*(figure|tableau))?\]")
 SAFETY_LINE_PATTERN = re.compile(r"⚠\s*Sécurité\s*:.*")
-CONTENT_TYPE_BY_HINT = {"figure": "image_description", "tableau": "table"}
+# "table_row" (M7.4 section 2.2: row-level table chunks) counts as a
+# "tableau" citation hint match just like the whole-table node does.
+CONTENT_TYPE_BY_HINT = {"figure": "image_description", "tableau": ("table", "table_row")}
 
 # The model occasionally writes a citation in a near-miss format instead of
 # the strict "[p. N]"/"[p. N, figure]"/"[p. N, tableau]" the prompt asks for
@@ -114,6 +116,7 @@ class RAGAnswer(BaseModel):
     mode_used: str = "simple"
     tool_calls: list[dict] = Field(default_factory=list)
     standalone_question: str | None = None
+    numbers_unverified: bool = False
 
 
 def _model_name(settings: Settings) -> str:
@@ -154,9 +157,10 @@ def _citations_from_matches(
         page = int(match.group(1))
         hint = match.group(2)
         wanted_type = CONTENT_TYPE_BY_HINT.get(hint) if hint else None
+        wanted_types = (wanted_type,) if isinstance(wanted_type, str) else wanted_type
         same_page = [n for n in nodes if n.page == page]
         candidate = next(
-            (n for n in same_page if not wanted_type or n.content_type == wanted_type),
+            (n for n in same_page if not wanted_types or n.content_type in wanted_types),
             None,
         ) or (same_page[0] if same_page else None)
         if candidate is None or candidate.node_id in seen_nodes:
@@ -187,6 +191,52 @@ def _repair_prompt(original_prompt: str, bad_answer: str) -> str:
         f"{original_prompt}\n\n(Brouillon précédent, à corriger : il citait une page absente "
         f"des extraits fournis ci-dessus.)\n{bad_answer}\n\n"
         "Corrige la réponse : ne cite QUE les pages des extraits <document> fournis ci-dessus."
+    )
+
+
+# M7.4 section 2.4: every number in the answer, OUTSIDE [p. N] citations,
+# must appear (after normalising thousands-separators/decimal commas) in at
+# least one chunk the answer actually cites. Catches exactly the bug a real
+# user hit: the LLM reused a page number as if it were a symbol/item number
+# (a page number inside a citation is never itself a claimed fact, so it's
+# stripped before this check runs).
+NUMBER_PATTERN = re.compile(r"\d+(?:[.,  ]\d+)*")
+UNVERIFIED_NOTICE = (
+    "⚠ Réponse non vérifiée : un ou plusieurs chiffres n'ont pas pu être confirmés "
+    "dans les sources citées."
+)
+
+
+def _normalize_number(token: str) -> str:
+    """"1 234,5" / "1 234.5" / "1234,5" all normalise to "1234.5", so a
+    number written slightly differently in the source vs. the answer (a
+    thousands space, a comma instead of a period) isn't wrongly flagged."""
+    cleaned = token.replace(" ", " ")
+    cleaned = re.sub(r"(?<=\d)[ ](?=\d)", "", cleaned)
+    return cleaned.replace(",", ".")
+
+
+def find_ungrounded_numbers(text: str, cited_nodes: list[RetrievedNode]) -> list[str]:
+    """Numbers in `text` (citation page numbers excluded) that appear in
+    NONE of `cited_nodes`' own text. Conservative: a number is only flagged
+    if it's genuinely absent from every cited source, never guessed."""
+    without_citations = CITATION_PATTERN.sub("", text)
+    found = {_normalize_number(m.group(0)) for m in NUMBER_PATTERN.finditer(without_citations)}
+    if not found:
+        return []
+    source_text = " ".join(n.text for n in cited_nodes)
+    grounded = {_normalize_number(m.group(0)) for m in NUMBER_PATTERN.finditer(source_text)}
+    return sorted(found - grounded)
+
+
+def _grounding_repair_prompt(original_prompt: str, bad_answer: str, ungrounded: list[str]) -> str:
+    numbers = ", ".join(ungrounded)
+    return (
+        f"{original_prompt}\n\n(Brouillon précédent, à corriger : il contient un ou plusieurs "
+        f"chiffres absents de TOUS les extraits fournis ci-dessus : {numbers}.)\n{bad_answer}\n\n"
+        "Corrige la réponse : ne donne QUE des chiffres qui apparaissent explicitement dans les "
+        "extraits <document> fournis ci-dessus. Si tu ne peux pas confirmer un chiffre, ne le "
+        "donne pas."
     )
 
 
@@ -414,6 +464,49 @@ def finalize_answer(
             timings=timings,
         )
 
+    # M7.4 section 2.4: every number outside a [p. N] citation must be
+    # grounded in a chunk the answer actually cites -- catches a page
+    # number getting reused as a fake symbol/item number, or any other
+    # invented figure. Conservative: regenerate ONCE, and only flag the
+    # answer as unverified (never silently drop it) if still ungrounded.
+    numbers_unverified = False
+    cited_ids = {c.node_id for c in citations}
+    cited_nodes = [n for n in prepared.nodes if n.node_id in cited_ids]
+    ungrounded = find_ungrounded_numbers(final_text, cited_nodes)
+    if ungrounded:
+        logger.warning("Ungrounded numbers in answer (%d): regenerating once", len(ungrounded))
+        try:
+            retry = _generate(
+                _grounding_repair_prompt(prepared.prompt, final_text, ungrounded), settings, llm=llm
+            )
+            retry_text, retry_citations, retry_corrected = _check_citations(
+                normalize_citation_markers(retry.text), prepared.nodes, prepared.prompt, settings,
+                llm=llm,
+            )
+            retry_text = _dedupe_safety_lines(retry_text)
+            retry_cited_nodes = [
+                n for n in prepared.nodes if n.node_id in {c.node_id for c in retry_citations}
+            ]
+            retry_ungrounded = (
+                find_ungrounded_numbers(retry_text, retry_cited_nodes)
+                if retry_citations
+                else ungrounded
+            )
+        except Exception:  # noqa: BLE001 -- regeneration failing just falls through to the notice
+            retry_citations, retry_ungrounded = [], ungrounded
+
+        if retry_citations and not retry_ungrounded:
+            final_text = retry_text
+            citations = retry_citations
+            corrected = corrected or retry_corrected
+        else:
+            logger.warning(
+                "Numbers still ungrounded after regeneration (%d): flagging as unverified",
+                len(retry_ungrounded),
+            )
+            final_text = f"{final_text}\n\n{UNVERIFIED_NOTICE}"
+            numbers_unverified = True
+
     safety_notice = _extract_safety_notice(final_text)
     # Only figures actually cited in the answer, not every retrieved image node.
     images = [
@@ -431,6 +524,7 @@ def finalize_answer(
         model=prepared.model,
         provider=prepared.provider,
         standalone_question=prepared.standalone_question,
+        numbers_unverified=numbers_unverified,
         timings=timings,
     )
 

@@ -99,9 +99,13 @@ def get_answer(
     the answer is still generated/citation-checked from this call's own
     retrieval alone.
 
-    On success, the answer TEXT is already rendered live by st.write_stream
-    (called here, inside the current st.chat_message block) -- the caller
-    must only render the metadata (render_answer_meta), not the text again.
+    On success, the answer TEXT is already rendered live by a manual
+    accumulate-and-markdown loop (called here, inside the current
+    st.chat_message block) -- the caller must only render the metadata
+    (render_answer_meta), not the text again. st.write_stream() is
+    deliberately avoided: it calls dataframe_util.is_dataframe_like() on the
+    stream object, which imports pyarrow purely for a type check -- an
+    unnecessary dependency on the hot path for a plain text stream.
     On refusal/error, nothing is rendered here: the caller renders the full
     answer (render_answer_text + render_answer_meta).
     Tests monkeypatch this single function instead of mocking the stream.
@@ -121,8 +125,12 @@ def get_answer(
     placeholder = st.empty()
     try:
         gen_start = time.monotonic()
+        full_text = ""
         with placeholder.container():
-            full_text = st.write_stream(service.generate_stream(prepared.prompt, settings))
+            text_slot = st.empty()
+            for chunk in service.generate_stream(prepared.prompt, settings):
+                full_text += chunk
+                text_slot.markdown(full_text)
         generation_ms = (time.monotonic() - gen_start) * 1000
     except Exception as exc:  # noqa: BLE001 -- e.g. Ollama unreachable mid-stream
         return RAGAnswer(

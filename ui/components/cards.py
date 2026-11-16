@@ -62,13 +62,19 @@ def render_no_source_chip() -> None:
 
 
 def _badge_label(content_type: str | None) -> tuple[str, str]:
-    labels = {"text": "passage", "table": "tableau", "image_description": "figure"}
+    labels = {
+        "text": "passage",
+        "table": "tableau",
+        "table_row": "tableau",
+        "image_description": "figure",
+    }
     icon = SOURCE_ROW_ICONS.get(content_type or "text", SOURCE_ROW_ICONS["text"])
     return labels.get(content_type or "text", "passage"), icon
 
 
 _VIEW_LABELS = {
     "table": "Voir le tableau",
+    "table_row": "Voir le tableau",
     "image_description": "Voir la figure",
     "text": "Voir le passage",
 }
@@ -84,7 +90,15 @@ def _mark_empty_columns_as_pictogram(table_markdown: str) -> str:
     if len(lines) < 2:
         return table_markdown
 
-    rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in lines]
+    def _inner(line: str) -> str:
+        # Exactly one leading/trailing "|", never `.strip("|")`: a row whose
+        # FIRST cell is empty (e.g. "||Risque...|", the stored format has no
+        # padding spaces) would otherwise collapse that cell's own delimiter
+        # too, shifting every column left by one.
+        stripped = line.strip()
+        return stripped[1:-1] if stripped.startswith("|") and stripped.endswith("|") else stripped
+
+    rows = [[cell.strip() for cell in _inner(line).split("|")] for line in lines]
     header, separator, *data_rows = rows
     if not data_rows:
         return table_markdown
@@ -212,24 +226,32 @@ def render_error_card(message: str, retry_key: str = "retry_error") -> bool:
 
 
 def render_timings_caption(result: RAGAnswer) -> None:
-    """Section 6.4 fix: ONE 12px muted line -- the previous version mixed
-    mono timings with the full raw model id ("qwen2.5:7b-instruct-q3_K_M ·
-    ollama"), long enough to wrap onto 2 lines. The short model label here
-    keeps the line short; the full id is still available as a native
-    browser tooltip (HTML `title`), never dropped."""
+    """Section 6.4/8.3 fix: ONE 12px muted line -- the previous version mixed
+    mono (JetBrains Mono) timings with the full raw model id
+    ("qwen2.5:7b-instruct-q3_K_M · ollama") and no per-segment nowrap, so it
+    still wrapped onto 2 lines ("Qwen / 7B"). Per the explicit spec: IBM Plex
+    Sans (the body font, no override needed) with `font-variant-numeric:
+    tabular-nums` instead of switching font family, and `white-space:nowrap`
+    on each segment so a segment never breaks mid-text -- only the GAP
+    between segments can wrap. The short model label keeps the line short;
+    the full id is still available as a native browser tooltip."""
     retrieval = fr_seconds(result.timings.get("retrieval_ms"))
     generation = fr_seconds(result.timings.get("generation_ms"))
+    nowrap_nums = 'style="white-space:nowrap;font-variant-numeric:tabular-nums;"'
     parts = []
     if retrieval is not None:
-        parts.append(f'Recherche <span class="md-mono">{retrieval}</span>')
+        parts.append(f'<span {nowrap_nums}>Recherche {retrieval}</span>')
     if generation is not None:
-        parts.append(f'Rédaction <span class="md-mono">{generation}</span>')
+        parts.append(f'<span {nowrap_nums}>Rédaction {generation}</span>')
     short_model = html.escape(_short_model_label(result.model))
     provider_label = {"ollama": "Ollama", "openrouter": "OpenRouter"}.get(
         result.provider, result.provider
     )
     full_model_title = html.escape(f"{result.model} · {result.provider}")
-    parts.append(f'<span title="{full_model_title}">{short_model} · {provider_label}</span>')
+    parts.append(
+        f'<span style="white-space:nowrap;" title="{full_model_title}">'
+        f"{short_model} · {provider_label}</span>"
+    )
     st.markdown(
         '<span style="font-size:12px;color:#5B6675;">' + " · ".join(parts) + "</span>",
         unsafe_allow_html=True,

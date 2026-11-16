@@ -14,6 +14,7 @@ import argparse
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -26,6 +27,9 @@ APP_PATH = PROJECT_ROOT / "ui" / "streamlit_app.py"
 REFERENCE_DIR = PROJECT_ROOT / "docs" / "design" / "reference"
 OUTPUT_DIR = PROJECT_ROOT / "docs" / "design" / "screenshots"
 FIXTURE_IMAGE = PROJECT_ROOT / "tests" / "fixtures" / "crop_p1_i2_pump.png"
+# Not under OUTPUT_DIR: this is a throwaway input fixture for the upload
+# widget, not a screenshot to keep.
+UNRELATED_IMAGE = Path(tempfile.gettempdir()) / "maintidoc_unrelated_diagram_fixture.png"
 STARTUP_TIMEOUT_SECONDS = 60
 VIEWPORT = {"width": 1440, "height": 900}
 VIEWPORT_WIDE = {"width": 1920, "height": 1080}
@@ -322,6 +326,47 @@ def _capture_image_search_result(page, base_url: str, out_prefix: str, server_lo
     return out
 
 
+def _build_unrelated_diagram_fixture() -> Path:
+    """A locally-drawn (no internet) UML/deployment-style diagram -- the same
+    out-of-domain category used to calibrate IMAGE_MIN_SCORE (section 3) --
+    for the rejected-match screenshot required by the task."""
+    from PIL import ImageDraw
+
+    img = Image.new("RGB", (640, 480), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    boxes = [
+        (40, 40, 220, 140, "API Gateway"),
+        (420, 40, 600, 140, "Auth Service"),
+        (40, 260, 220, 360, "Database"),
+        (420, 260, 600, 360, "Cache"),
+    ]
+    for x0, y0, x1, y1, label in boxes:
+        draw.rectangle((x0, y0, x1, y1), outline=(0, 0, 0), width=2)
+        draw.text((x0 + 10, y0 + 40), label, fill=(0, 0, 0))
+    draw.line((220, 90, 420, 90), fill=(0, 0, 0), width=2)
+    draw.line((130, 140, 130, 260), fill=(0, 0, 0), width=2)
+    draw.line((510, 140, 510, 260), fill=(0, 0, 0), width=2)
+    UNRELATED_IMAGE.parent.mkdir(parents=True, exist_ok=True)
+    img.save(UNRELATED_IMAGE)
+    return UNRELATED_IMAGE
+
+
+def _capture_image_search_rejected(page, base_url: str, out_prefix: str, server_log: str) -> Path:
+    page.goto(base_url)
+    page.wait_for_selector("text=MaintiDoc", timeout=90_000)
+    page.get_by_role("link", name="Recherche par image").click()
+    page.wait_for_selector("text=Votre image", timeout=30_000)
+    page.set_input_files("input[type=file]", str(_build_unrelated_diagram_fixture()))
+    page.wait_for_selector(
+        "text=Aucune figure du manuel ne ressemble à cette image.", timeout=300_000
+    )
+    page.wait_for_timeout(500)
+    out = OUTPUT_DIR / f"{out_prefix}.png"
+    page.screenshot(path=str(out), full_page=True)
+    run_checks_for_capture(page, out, out_prefix, server_log)
+    return out
+
+
 def _capture_document(page, base_url: str, out_prefix: str, server_log: str) -> Path:
     page.goto(base_url)
     page.wait_for_selector("text=MaintiDoc", timeout=90_000)
@@ -393,6 +438,10 @@ def _capture_all(pw, browser, args, base_url: str, port: int) -> str:
                 _capture_image_search_result(
                     page, base_url, f"2-recherche-image-app-result-{suffix}", ""
                 )
+                if suffix == "light":
+                    _capture_image_search_rejected(
+                        page, base_url, "2-recherche-image-app-rejected-light", ""
+                    )
                 _capture_document(page, base_url, f"3-document-app-{suffix}", "")
             finally:
                 context.close()

@@ -117,3 +117,50 @@ def test_already_indexed_check_uses_sha256_prefix(
     sha12 = _processed_dir.name
     assert (document_module.PROCESSED_ROOT / sha12 / "manifest.json").is_file()
     assert not (document_module.PROCESSED_ROOT / "other000000" / "manifest.json").is_file()
+
+
+# --- M7.4 section 8.4: stat tiles + indexation clarity ----------------------
+
+
+def test_stat_tile_labels_are_short_and_consistent() -> None:
+    """"Passages de texte"/"Figures" (not "Passages"/"Figures décrites") --
+    short enough that all 4 tiles stay the same height."""
+
+    def _script() -> None:
+        from ui.components.document import _render_stat_tiles
+
+        _render_stat_tiles(
+            {"total_pages": 48, "counts": {"text_chunks": 58, "tables": 30, "images_kept": 52}}
+        )
+
+    at = AppTest.from_function(_script)
+    at.run(timeout=30)
+
+    assert not at.exception
+    joined = "\n".join(m.value for m in at.markdown)
+    assert "Passages de texte" in joined
+    assert "Figures</span>" in joined
+    assert "Figures décrites" not in joined
+
+
+def test_indexation_detail_disambiguates_text_vs_table_count() -> None:
+    """Section 8.4 fix: "88 éléments indexés (58 textes + 30 tableaux)",
+    never a bare "88 passages indexés" that reads as contradicting the
+    "Passages de texte" tile showing 58."""
+
+    def _script() -> None:
+        from ui.components.document import _render_preparation_timeline
+
+        _render_preparation_timeline(
+            {
+                "counts": {"text_chunks": 58, "tables": 30, "images_kept": 52},
+                "images_enrichment": {},
+            }
+        )
+
+    at = AppTest.from_function(_script)
+    at.run(timeout=30)
+
+    assert not at.exception
+    joined = "\n".join(c.value for c in at.caption)
+    assert "88 éléments indexés (58 textes + 30 tableaux)" in joined

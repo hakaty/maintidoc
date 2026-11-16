@@ -91,7 +91,7 @@ def _render_nodes(nodes: list[RetrievedNode]) -> str:
 
 def _search_filtered(
     query_text: str,
-    content_type: str | None,
+    content_type: str | list[str] | None,
     pdf_sha256: str,
     k: int,
     settings: Settings,
@@ -152,7 +152,10 @@ def build_tools(
             return "(la requête de recherche ne peut pas être vide)"
         start = time.monotonic()
         safe_k = _validate_k(k)
-        nodes = _search_filtered(safe_query, "table", pdf_sha256, safe_k, settings)
+        # ["table", "table_row"]: a row-level chunk is still "a table result"
+        # for this tool (M7.4 section 2.2 added row-level chunks alongside
+        # the whole-table chunk).
+        nodes = _search_filtered(safe_query, ["table", "table_row"], pdf_sha256, safe_k, settings)
         ledger.record(
             nodes, "search_tables", {"query": safe_query, "k": safe_k}, time.monotonic() - start
         )
@@ -166,7 +169,13 @@ def build_tools(
             return "(la requête de recherche ne peut pas être vide)"
         start = time.monotonic()
         safe_k = _validate_k(k)
-        nodes = _search_filtered(safe_query, "image_description", pdf_sha256, safe_k, settings)
+        # ["image_description", "table_row"]: a pictogram's description can
+        # now live in either a standalone image_description node OR a
+        # table_row cell (M7.4 section 2.1) -- a figures search must find
+        # either, not just the former.
+        nodes = _search_filtered(
+            safe_query, ["image_description", "table_row"], pdf_sha256, safe_k, settings
+        )
         ledger.record(
             nodes, "search_figures", {"query": safe_query, "k": safe_k}, time.monotonic() - start
         )

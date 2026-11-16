@@ -48,7 +48,13 @@ class _RecordingStore:
                     pdf_sha256 = f.value
         if pdf_sha256 != "doc-under-test":
             return VectorStoreQueryResult(nodes=[], similarities=[])
-        nodes = self.nodes_by_type.get(content_type or "any", [])
+        if isinstance(content_type, list):
+            # search_tables/search_figures now filter on a LIST of content
+            # types (M7.4: table_row chunks can also hold pictogram info) --
+            # match any one of them.
+            nodes = [n for ct in content_type for n in self.nodes_by_type.get(ct, [])]
+        else:
+            nodes = self.nodes_by_type.get(content_type or "any", [])
         return VectorStoreQueryResult(nodes=nodes, similarities=[0.8] * len(nodes))
 
     def get_nodes(self, filters=None):

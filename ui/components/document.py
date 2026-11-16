@@ -46,12 +46,16 @@ def _render_stat_tiles(manifest: dict) -> None:
     + label together, wrapped in a bordered white ".md-tile" card like the
     reference's `.tile` class) -- values/labels are manifest-derived
     integers, never user/document text, so no escaping is needed here."""
+    # Section 8.4 fix: shorter labels ("Passages de texte"/"Figures") that
+    # fit on fewer lines, so all 4 tiles stay the same height -- paired with
+    # a fixed min-height on .md-tile (ui/theme.py) for the cases where a
+    # label still wraps.
     counts = manifest.get("counts", {})
     stats = [
         ("Pages", manifest.get("total_pages", 0)),
-        ("Passages", counts.get("text_chunks", 0)),
+        ("Passages de texte", counts.get("text_chunks", 0)),
         ("Tableaux", counts.get("tables", 0)),
-        ("Figures décrites", counts.get("images_kept", 0)),
+        ("Figures", counts.get("images_kept", 0)),
     ]
     cols = st.columns(len(stats))
     for col, (label, value) in zip(cols, stats, strict=True):
@@ -98,7 +102,13 @@ def _render_preparation_timeline(manifest: dict) -> None:
         ),
         (
             "Indexation",
-            f"{counts.get('text_chunks', 0) + counts.get('tables', 0)} passages indexés · "
+            # Section 8.4 fix: "88 éléments indexés (58 textes + 30
+            # tableaux)" -- the previous "88 passages indexés" wording, next
+            # to a "Passages" tile showing 58, looked like two different
+            # (contradictory) counts of the same thing. Computed from the
+            # real manifest counts, never hard-coded.
+            f"{counts.get('text_chunks', 0) + counts.get('tables', 0)} éléments indexés "
+            f"({counts.get('text_chunks', 0)} textes + {counts.get('tables', 0)} tableaux) · "
             f"{counts.get('images_kept', 0)} figures indexées",
         ),
     ]

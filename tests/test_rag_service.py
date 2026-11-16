@@ -408,3 +408,63 @@ def test_real_end_to_end_ask_question() -> None:
     assert all(c.page > 0 for c in result.citations)
     assert result.model
     assert result.provider == "ollama"
+
+
+# --- M7.4 section 2.4: number-grounding check -------------------------------
+
+
+def test_find_ungrounded_numbers_ignores_citation_page_numbers() -> None:
+    node = _node(page=4, text="Le personnel qualifié peut installer l'unité.")
+    # "4" only appears inside the citation bracket, nowhere else -- must NOT
+    # be flagged (a page number is not a claimed fact).
+    assert service_module.find_ungrounded_numbers("Voir la procédure [p. 4].", [node]) == []
+
+
+def test_find_ungrounded_numbers_flags_a_number_absent_from_every_cited_source() -> None:
+    node = _node(page=4, text="Le couple de serrage est de 12 Nm.")
+    result = service_module.find_ungrounded_numbers("Le couple est de 99 Nm [p. 4].", [node])
+    assert result == ["99"]
+
+
+def test_find_ungrounded_numbers_accepts_different_formatting_of_the_same_number() -> None:
+    node = _node(page=4, text="La charge maximale est de 1 234,5 kg.")
+    result = service_module.find_ungrounded_numbers("Charge : 1234.5 kg [p. 4].", [node])
+    assert result == []
+
+
+def test_find_ungrounded_numbers_empty_when_answer_has_no_numbers() -> None:
+    node = _node(page=4, text="Le personnel qualifié peut installer l'unité.")
+    assert service_module.find_ungrounded_numbers("Voir le manuel [p. 4].", [node]) == []
+
+
+def test_ungrounded_number_triggers_one_regeneration_and_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node = _node(page=4, text="Le couple de serrage est de 12 Nm.")
+    _patch_retrieve(monkeypatch, RetrievalResult(nodes=[node], best_score=0.9, refused=False))
+    llm = _FakeLLM(["Le couple est de 99 Nm [p. 4].", "Le couple est de 12 Nm [p. 4]."])
+    _patch_llm(monkeypatch, llm)
+
+    result = service_module.answer("Quel est le couple de serrage ?", settings=_settings())
+
+    assert result.refused is False
+    assert result.numbers_unverified is False
+    assert "12 Nm" in result.answer
+    assert "non vérifiée" not in result.answer
+    assert len(llm.calls) == 2  # initial generation + one grounding-repair retry
+
+
+def test_number_still_ungrounded_after_retry_is_flagged_unverified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node = _node(page=4, text="Le couple de serrage est de 12 Nm.")
+    _patch_retrieve(monkeypatch, RetrievalResult(nodes=[node], best_score=0.9, refused=False))
+    llm = _FakeLLM(["Le couple est de 99 Nm [p. 4].", "Le couple est de 77 Nm [p. 4]."])
+    _patch_llm(monkeypatch, llm)
+
+    result = service_module.answer("Quel est le couple de serrage ?", settings=_settings())
+
+    assert result.refused is False
+    assert result.numbers_unverified is True
+    assert service_module.UNVERIFIED_NOTICE in result.answer
+    assert len(llm.calls) == 2

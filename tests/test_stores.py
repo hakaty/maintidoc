@@ -214,9 +214,9 @@ def test_build_index_inserts_text_and_image_nodes(tmp_path: Path, db_settings: S
 
     result = build_index(processed_dir, settings=db_settings)
 
-    assert result.text_nodes_total == 3  # text chunk + table + image_description
-    assert result.text_nodes_added == 3
-    assert result.text_count_in_db == 3
+    assert result.text_nodes_total == 4  # text chunk + table + table_row + image_description
+    assert result.text_nodes_added == 4
+    assert result.text_count_in_db == 4
     assert result.image_nodes_total == 1
     assert result.image_nodes_added == 1
     assert result.image_count_in_db == 1
@@ -232,7 +232,7 @@ def test_build_index_is_idempotent(tmp_path: Path, db_settings: Settings) -> Non
 
     assert second.text_nodes_added == 0
     assert second.image_nodes_added == 0
-    assert second.text_count_in_db == 3
+    assert second.text_count_in_db == 4
     assert second.image_count_in_db == 1
 
 
@@ -246,8 +246,8 @@ def test_build_index_force_rebuilds_without_duplicating(
     build_index(processed_dir, settings=db_settings)
     result = build_index(processed_dir, force=True, settings=db_settings)
 
-    assert result.text_nodes_added == 3
-    assert result.text_count_in_db == 3
+    assert result.text_nodes_added == 4
+    assert result.text_count_in_db == 4
     assert result.image_count_in_db == 1
 
 
@@ -287,7 +287,7 @@ def test_vector_mode_does_not_use_hybrid(tmp_path: Path, db_settings: Settings) 
 
     results = search_text("entretenue", k=5, mode="vector", settings=db_settings)
 
-    assert len(results) <= 3
+    assert len(results) <= 4
 
 
 @pytest.mark.integration

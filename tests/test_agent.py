@@ -54,7 +54,12 @@ class _RecordingStore:
             content_type = next(
                 (f.value for f in vs_query.filters.filters if f.key == "content_type"), None
             )
-        nodes = self.nodes_by_type.get(content_type or "any", [])
+        if isinstance(content_type, list):
+            # search_tables/search_figures now filter on a LIST of content
+            # types (M7.4: table_row chunks can also hold pictogram info).
+            nodes = [n for ct in content_type for n in self.nodes_by_type.get(ct, [])]
+        else:
+            nodes = self.nodes_by_type.get(content_type or "any", [])
         return VectorStoreQueryResult(nodes=nodes, similarities=[0.8] * len(nodes))
 
     def get_nodes(self, filters=None):
