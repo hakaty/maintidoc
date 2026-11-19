@@ -67,13 +67,27 @@ class Settings(BaseSettings):
     # see docs/05_rapport_rag.md section 0c.
     rag_expansion_skip_score: float = 0.65
 
-    # Image search rejection threshold (M7.4 section 3): calibrated on real
-    # data (51 perturbed manual figures vs. 6 locally-generated unrelated
-    # images -- see scripts/_calibrate_image_threshold.py), in-domain top1
-    # scores 0.78-0.99 vs. out-of-domain 0.40-0.71. 0.78 gives 100%
-    # out-of-domain rejection while keeping in-domain recall@3 at 96.1%
-    # (>= the 95% target). Never guessed.
-    image_min_score: float = 0.78
+    # Image search thresholds (M7.4 section 3, recalibrated M7.4b section 2
+    # on a much larger/harder set: 51 perturbed figure crops + 20 "screen
+    # photo" full-page simulations (moire/perspective/glare/downscale/
+    # partial-crop) vs. 66 locally-generated unrelated images across 11
+    # families -- see scripts/_calibrate_image_threshold.py). Never guessed.
+    # Calibrated against the FINAL image index (after the M7.4b section 4
+    # black-thumbnail/smask extraction fix and a clean VLM re-enrichment --
+    # an earlier calibration pass run while those were still in flight gave
+    # a much weaker 0.56/0.78 and was discarded as invalid).
+    #
+    # image_min_score (reject below): in-domain recall@3 = 95.8%, holding
+    # out-of-domain rejection at 80.3% -- a real improvement on the interim
+    # run (25-42%) once the index itself was correct.
+    image_min_score: float = 0.64
+    # image_review_score (confident match above this, "Meilleure
+    # correspondance" eligible): the highest point where out-of-domain
+    # rejection reaches 100% in the sweep. Between image_min_score and this
+    # value, a result is shown as "Correspondances possibles -- a
+    # verifier" rather than either a confident match or an outright
+    # rejection.
+    image_review_score: float = 0.76
 
     agent_max_tool_calls: int = 4
     agent_timeout_seconds: float = 90.0

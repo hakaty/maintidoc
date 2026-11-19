@@ -40,3 +40,8 @@ eval/agent_run_debug.log
 # (same reason as tests/fixtures above). docs/diagnostics/page5.png (the
 # actual diagnosis evidence) is kept.
 docs/diagnostics/image_threshold/
+
+# M7.4b section 2: real product photos used manually to sanity-check the
+# image-search threshold (not authored by this project) -- never committed,
+# same reasoning as the single input PDF above.
+data/test_photos/

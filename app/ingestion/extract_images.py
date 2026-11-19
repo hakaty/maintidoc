@@ -60,6 +60,35 @@ class _Occurrence:
     bbox: tuple[float, float, float, float]
 
 
+def _composite_smask_on_white(doc: pymupdf.Document, info: dict, data: bytes) -> bytes:
+    """M7.4b section 4 fix: `Document.extract_image()` returns the embedded
+    image's BASE layer without applying its soft mask (/SMask) -- for an
+    image authored with transparency, that base layer's "transparent" areas
+    are commonly filled with black, which is only ever correct once a
+    renderer composites the mask on top. Never leaving that black fill in
+    the saved PNG (several manual figures, e.g. p. 10/23/24, were otherwise
+    shown on an unreadable black background everywhere the UI displays
+    them) -- composite onto an opaque WHITE canvas here, once, at
+    extraction time, so every consumer downstream always gets a correct,
+    already-flattened image."""
+    smask_xref = info.get("smask")
+    if not smask_xref:
+        return data
+    try:
+        base = PILImage.open(io.BytesIO(data)).convert("RGB")
+        mask_info = doc.extract_image(smask_xref)
+        mask = PILImage.open(io.BytesIO(mask_info["image"])).convert("L")
+        if mask.size != base.size:
+            mask = mask.resize(base.size)
+        background = PILImage.new("RGB", base.size, (255, 255, 255))
+        background.paste(base, mask=mask)
+        buf = io.BytesIO()
+        background.save(buf, format="PNG")
+        return buf.getvalue()
+    except OSError:
+        return data
+
+
 def _collect_occurrences(doc: pymupdf.Document) -> list[_Occurrence]:
     occurrences: list[_Occurrence] = []
     for page_index, page in enumerate(doc):
@@ -72,7 +101,7 @@ def _collect_occurrences(doc: pymupdf.Document) -> list[_Occurrence]:
             seen_xrefs_on_page.add(xref)
 
             info = doc.extract_image(xref)
-            data: bytes = info["image"]
+            data: bytes = _composite_smask_on_white(doc, info, info["image"])
             rects = page.get_image_rects(xref)
             bbox = tuple(rects[0]) if rects else (0.0, 0.0, 0.0, 0.0)
 

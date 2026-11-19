@@ -257,3 +257,59 @@ def test_a_cell_that_already_has_real_text_is_never_overwritten() -> None:
 
     assert "déjà du texte" in table_node.text
     assert "[pictogramme" not in table_node.text
+
+
+# --- M7.4b section 3: pictogram cell descriptions must be SHORT -----------
+
+
+def test_short_pictogram_description_caps_at_12_words_never_mid_word() -> None:
+    from app.indexing.nodes import _short_pictogram_description
+
+    long_description = (
+        "L'image représente un pictogramme de sécurité montrant deux gants "
+        "superposés en caoutchouc jaune, ce qui indique une obligation de "
+        "port de gants de protection avant toute intervention."
+    )
+    short = _short_pictogram_description(long_description)
+
+    assert len(short.split()) <= 12 + 1  # +1 tolerates a trailing "…" word
+    assert not short.endswith((" ", "-"))
+
+
+def test_short_pictogram_description_strips_generic_vlm_lead_in() -> None:
+    from app.indexing.nodes import _short_pictogram_description
+
+    short = _short_pictogram_description(
+        "L'image représente un pictogramme de sécurité, signalant une zone "
+        "dangereuse avec une explosion possible."
+    )
+
+    assert "L'image" not in short
+    assert "zone dangereuse avec une explosion possible" in short
+
+
+def test_short_pictogram_description_already_short_is_unchanged() -> None:
+    from app.indexing.nodes import _short_pictogram_description
+
+    assert (
+        _short_pictogram_description('Un triangle jaune avec un texte noir "EX" au centre')
+        == 'Un triangle jaune avec un texte noir "EX" au centre'
+    )
+
+
+def test_short_pictogram_description_extends_past_12_words_to_keep_a_trailing_code() -> None:
+    """Real regression hit on the live manual: the flat 12-word cap cut the
+    "Risque d'atmosphere explosive" row right before the one identifying
+    detail -- the actual letters "EX" -- producing "...contenant les
+    lettres…" with no letters at all. A short ALL-CAPS code (or a quoted
+    span) must never be silently dropped like this."""
+    from app.indexing.nodes import _short_pictogram_description
+
+    text = (
+        "Un triangle jaune avec un triangle noir à l'intérieur, contenant "
+        "les lettres EX au centre."
+    )
+    short = _short_pictogram_description(text)
+
+    assert "EX" in short
+    assert len(short.split()) <= 14  # still short, just past the flat 12-word cap

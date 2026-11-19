@@ -31,7 +31,9 @@ CITATION_PATTERN = re.compile(r"\[p\.\s*(\d+)(?:\s*,\s*(figure|tableau))?\]")
 SAFETY_LINE_PATTERN = re.compile(r"⚠\s*Sécurité\s*:.*")
 # "table_row" (M7.4 section 2.2: row-level table chunks) counts as a
 # "tableau" citation hint match just like the whole-table node does.
-CONTENT_TYPE_BY_HINT = {"figure": "image_description", "tableau": ("table", "table_row")}
+# Order matters for "tableau": table_row (one specific row) is preferred
+# over table (the whole table) -- see the preference loop below.
+CONTENT_TYPE_BY_HINT = {"figure": "image_description", "tableau": ("table_row", "table")}
 
 # The model occasionally writes a citation in a near-miss format instead of
 # the strict "[p. N]"/"[p. N, figure]"/"[p. N, tableau]" the prompt asks for
@@ -42,9 +44,15 @@ CONTENT_TYPE_BY_HINT = {"figure": "image_description", "tableau": ("table", "tab
 # Deliberately requires either a bracket/parenthesis delimiter OR the full
 # word "page" -- a bare "p 35" with no delimiter is too easy to confuse with
 # unrelated text (e.g. "temp 35") and is NOT treated as a citation variant.
+# The first alternative also catches the model occasionally parroting the
+# context block's own `<document page="40" type="table">` wrapper syntax
+# into its citation (e.g. "[document page=\"40\", tableau]") -- a real M7.4
+# regression (qa05) where this near-miss format matched zero citations,
+# triggering no repair, and the answer was wrongly refused.
 CITATION_VARIANT_PATTERN = re.compile(
-    r"(?:[\[(]\s*p(?:age)?\.?\s*(\d+)(?:\s*,\s*(figure|tableau))?\s*[\])]"
-    r"|\bpage\.?\s*(\d+)(?:\s*,\s*(figure|tableau))?\b)",
+    r"(?:\[\s*document\s+page\s*=\s*[\"']?(\d+)[\"']?(?:\s*,\s*(figure|tableau))?\s*\]"
+    r"|[\[(]\s*p(?:age)?\.?\s*(\d+)(?:\s*,\s*(figure|tableau))?\s*[\])]"
+    r"|\bpage\.?\s*=?\s*[\"']?(\d+)[\"']?(?:\s*,\s*(figure|tableau))?\b)",
     re.IGNORECASE,
 )
 
@@ -55,8 +63,8 @@ def normalize_citation_markers(text: str) -> str:
     page turns out not to be in this run's evidence)."""
 
     def _replace(match: re.Match) -> str:
-        page = match.group(1) or match.group(3)
-        hint = match.group(2) or match.group(4)
+        page = match.group(1) or match.group(3) or match.group(5)
+        hint = match.group(2) or match.group(4) or match.group(6)
         return f"[p. {page}, {hint.lower()}]" if hint else f"[p. {page}]"
 
     return CITATION_VARIANT_PATTERN.sub(_replace, text)
@@ -97,6 +105,14 @@ class Citation(BaseModel):
     image_id: str | None = None
     image_path: str | None = None
     snippet: str
+    # M7.4b section 3 fix: `snippet` is deliberately short (for the inline
+    # citation list) -- `full_text` is the node's COMPLETE, untruncated text,
+    # so the UI's "Voir le tableau"/"Voir le passage" expander never shows a
+    # sentence cut off mid-word. `table_id` lets the UI fetch the WHOLE table
+    # (get_full_table_text) regardless of whether this citation matched the
+    # whole-table chunk or one specific table_row chunk.
+    full_text: str = ""
+    table_id: str | None = None
 
 
 class RAGAnswer(BaseModel):
@@ -159,10 +175,21 @@ def _citations_from_matches(
         wanted_type = CONTENT_TYPE_BY_HINT.get(hint) if hint else None
         wanted_types = (wanted_type,) if isinstance(wanted_type, str) else wanted_type
         same_page = [n for n in nodes if n.page == page]
-        candidate = next(
-            (n for n in same_page if not wanted_types or n.content_type in wanted_types),
-            None,
-        ) or (same_page[0] if same_page else None)
+        candidate = None
+        # M7.4b section 3 fix: when BOTH a "table" (whole table) and a
+        # "table_row" (one specific row) node match the same "tableau" hint,
+        # prefer table_row -- it pins down exactly which row to highlight in
+        # the UI's full-table preview; a plain "table" match carries no such
+        # pointer. wanted_types is ordered most- to least-specific for this
+        # reason (see CONTENT_TYPE_BY_HINT), so try it in order rather than
+        # just testing membership.
+        if wanted_types:
+            for wanted in wanted_types:
+                candidate = next((n for n in same_page if n.content_type == wanted), None)
+                if candidate is not None:
+                    break
+        if candidate is None:
+            candidate = same_page[0] if same_page else None
         if candidate is None or candidate.node_id in seen_nodes:
             continue
         seen_nodes.add(candidate.node_id)
@@ -174,6 +201,8 @@ def _citations_from_matches(
                 image_id=candidate.image_id,
                 image_path=candidate.image_path,
                 snippet=candidate.text[:120],
+                full_text=candidate.text,
+                table_id=candidate.table_id,
             )
         )
     return citations
@@ -277,18 +306,27 @@ def _check_citations(
     valid_pages = _valid_pages(nodes)
     matches = list(CITATION_PATTERN.finditer(raw_answer))
     unknown = [m for m in matches if int(m.group(1)) not in valid_pages]
+    # Zero recognized citations on a substantive (non-refusal) answer is
+    # usually a near-miss format normalize_citation_markers() doesn't cover
+    # yet, not evidence the answer is unsupported -- repair it the same way
+    # as an unknown-page citation, instead of silently refusing (qa05
+    # regression: the model wrote "[document page=\"40\", tableau]", which
+    # matched nothing, so no repair was attempted and a correct answer with
+    # evidence in context was thrown away).
+    needs_repair = bool(unknown) or (not matches and REFUSAL_TEXT not in raw_answer)
 
-    if unknown:
+    if needs_repair:
         try:
             retry = _generate(_repair_prompt(prompt, raw_answer), settings, llm=llm)
         except Exception:  # noqa: BLE001 -- regeneration failing just falls through to stripping
             retry = None
         if retry is not None:
-            retry_matches = list(CITATION_PATTERN.finditer(retry.text))
+            retry_text = normalize_citation_markers(retry.text)
+            retry_matches = list(CITATION_PATTERN.finditer(retry_text))
             retry_unknown = [m for m in retry_matches if int(m.group(1)) not in valid_pages]
-            if not retry_unknown:
-                return retry.text, _citations_from_matches(retry_matches, nodes), False
-            raw_answer, matches = retry.text, retry_matches
+            if retry_matches and not retry_unknown:
+                return retry_text, _citations_from_matches(retry_matches, nodes), False
+            raw_answer, matches = retry_text, retry_matches
 
         cleaned = _strip_invalid_citations(raw_answer, valid_pages)
         valid_matches = [m for m in matches if int(m.group(1)) in valid_pages]

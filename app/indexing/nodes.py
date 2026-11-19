@@ -6,11 +6,32 @@ All rendered text comes from document/VLM content, which is UNTRUSTED data:
 stored as-is in the index, never interpreted as instructions.
 """
 
+import re
 from typing import Any
 
 from llama_index.core.schema import TextNode
 
-MAX_PICTOGRAM_DESCRIPTION_CHARS = 90
+# M7.4b fix: 90 CHARACTERS still produced near-full sentence fragments in the
+# table cell (e.g. "L'image montre un symbole de sécurité électrique,
+# représenté par un triangle jaune avec…") -- not the short, scannable cell
+# the task asks for (e.g. "triangle jaune avec « EX » noir"). Capped by WORD
+# count instead, after stripping the VLM's generic lead-in clause.
+MAX_PICTOGRAM_DESCRIPTION_WORDS = 12
+# A flat word cap can cut a description off right before its one crucial
+# identifying detail -- a real regression hit on the real manual: "Un
+# triangle jaune avec un triangle noir a l'interieur, contenant les
+# lettres…" lost the actual letters ("EX") that make the pictogram
+# recognizable. If a quoted span or a short ALL-CAPS code (like "EX") is
+# present, the cap is extended (up to this ceiling) to keep it whole rather
+# than silently dropping the one detail a technician would look for.
+MAX_PICTOGRAM_DESCRIPTION_WORDS_WITH_CODE = 20
+
+_PICTOGRAM_BOILERPLATE = re.compile(
+    r"^l['’]image\s+(?:montre|représente)\s+une?\s+(?:symbole|pictogramme)"
+    r"(?:\s+de\s+sécurité)?,?\s*(?:signalant|représenté(?:e)?\s+par|montrant|d['’])?\s*",
+    re.IGNORECASE,
+)
+_PICTOGRAM_CODE_PATTERN = re.compile(r'"[^"]+"|«[^»]+»|\b[A-Z]{2,4}\b')
 
 
 def text_node_id(pdf_sha256: str, content_type: str, original_id: str) -> str:
@@ -67,15 +88,37 @@ def _bbox_overlap_ratio(
 
 
 def _short_pictogram_description(description: str | None) -> str:
-    """Section 2.1 fix: a SHORT description for the table cell, not the full
-    (often 1-2 sentence) VLM description -- clamped at a word boundary."""
+    """Section 2.1 fix (M7.4), shortened further in M7.4b: a SHORT, scannable
+    description for the table cell, not the full (often 1-2 sentence) VLM
+    description -- the full description always remains available separately
+    on the image's own "image_description" node, this is cell display text
+    only. Strips the VLM's generic lead-in clause ("L'image représente un
+    pictogramme de sécurité, signalant...") then clamps to
+    MAX_PICTOGRAM_DESCRIPTION_WORDS words, never mid-word."""
     if not description:
         return ""
     text = description.strip().rstrip(".")
-    if len(text) <= MAX_PICTOGRAM_DESCRIPTION_CHARS:
+    stripped = _PICTOGRAM_BOILERPLATE.sub("", text, count=1).strip()
+    if stripped:
+        text = stripped
+    words = text.split()
+    if len(words) <= MAX_PICTOGRAM_DESCRIPTION_WORDS:
         return text
-    truncated = text[:MAX_PICTOGRAM_DESCRIPTION_CHARS].rsplit(" ", 1)[0]
-    return f"{truncated}…"
+
+    codes = _PICTOGRAM_CODE_PATTERN.findall(text)
+    cap = MAX_PICTOGRAM_DESCRIPTION_WORDS
+    if codes and not any(code in " ".join(words[:cap]) for code in codes):
+        # Extend word-by-word (never past the higher ceiling) until the
+        # first missing code is fully included, instead of cutting right
+        # before it.
+        for cap in range(
+            MAX_PICTOGRAM_DESCRIPTION_WORDS + 1, MAX_PICTOGRAM_DESCRIPTION_WORDS_WITH_CODE + 1
+        ):
+            if any(code in " ".join(words[:cap]) for code in codes):
+                break
+    if cap >= len(words):
+        return text
+    return " ".join(words[:cap]) + "…"
 
 
 ImageHint = tuple[tuple[float, float, float, float], "str | None", "str | None"]
@@ -223,8 +266,7 @@ def _table_row_nodes(
 
 def _patched_table_markdown(
     raw: dict[str, Any],
-    images_by_page: dict[int, list[ImageHint]]
-    | None,
+    images_by_page: dict[int, list[ImageHint]] | None,
 ) -> str:
     meta = raw["metadata"]
     markdown = raw.get("text", "")

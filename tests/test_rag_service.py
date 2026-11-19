@@ -410,6 +410,57 @@ def test_real_end_to_end_ask_question() -> None:
     assert result.provider == "ollama"
 
 
+# --- M7.4b section 3: table citations prefer table_row, keep full_text -----
+
+
+def test_tableau_citation_prefers_table_row_over_table() -> None:
+    """A table_row node pins down exactly which row to highlight in the
+    UI's full-table preview; a whole-table match carries no such pointer --
+    table_row must win when both exist for the same page."""
+    whole_table = _node(
+        node_id="t1", page=5, content_type="table", text="Tableau (page 5) — ...", table_id="tbl5"
+    )
+    one_row = _node(
+        node_id="r1",
+        page=5,
+        content_type="table_row",
+        text="Tableau (page 5)\nSymbole|Description\n[pictogramme]|Risque",
+        table_id="tbl5",
+    )
+    match = next(service_module.CITATION_PATTERN.finditer("Voir [p. 5, tableau]."))
+
+    citations = service_module._citations_from_matches([match], [whole_table, one_row])
+
+    assert len(citations) == 1
+    assert citations[0].content_type == "table_row"
+    assert citations[0].node_id == "r1"
+    assert citations[0].table_id == "tbl5"
+
+
+def test_tableau_citation_falls_back_to_table_when_no_row_matched() -> None:
+    whole_table = _node(node_id="t1", page=5, content_type="table", text="Tableau (page 5) — ...")
+    match = next(service_module.CITATION_PATTERN.finditer("Voir [p. 5, tableau]."))
+
+    citations = service_module._citations_from_matches([match], [whole_table])
+
+    assert citations[0].content_type == "table"
+
+
+def test_citation_full_text_is_never_truncated() -> None:
+    """`snippet` is deliberately short for the inline list; `full_text` must
+    be the node's COMPLETE text so the "Voir le tableau"/"Voir le passage"
+    expander never shows a sentence cut off mid-word (M7.4b regression: the
+    old code reused the 120-char snippet as the expander's "full" text)."""
+    long_text = "Tableau (page 5) — " + "x" * 200
+    node = _node(node_id="t1", page=5, content_type="table", text=long_text)
+    match = next(service_module.CITATION_PATTERN.finditer("Voir [p. 5, tableau]."))
+
+    citations = service_module._citations_from_matches([match], [node])
+
+    assert citations[0].full_text == long_text
+    assert len(citations[0].snippet) < len(long_text)
+
+
 # --- M7.4 section 2.4: number-grounding check -------------------------------
 
 

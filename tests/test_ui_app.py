@@ -821,7 +821,10 @@ def test_section6_5_inline_citation_chips_escape_untrusted_answer_text() -> None
 def test_section6_6_entirely_empty_table_column_shows_pictogramme_placeholder() -> None:
     """Bug fix (6.6): a column whose pictogram cells are images (never
     captured as table text) used to render as a confusing blank gap."""
-    from ui.components.cards import _mark_empty_columns_as_pictogram
+    from ui.components.cards import (
+        _fill_empty_columns_with_pictogram_placeholder,
+        _parse_markdown_table,
+    )
 
     table_md = (
         "| Symbole | Description |\n"
@@ -829,17 +832,75 @@ def test_section6_6_entirely_empty_table_column_shows_pictogramme_placeholder() 
         "|  | Risque électrique |\n"
         "|  | Risque mécanique |\n"
     )
-    result = _mark_empty_columns_as_pictogram(table_md)
-    assert "*(pictogramme)*" in result
-    assert "Risque électrique" in result
-    assert "Risque mécanique" in result
+    rows = _fill_empty_columns_with_pictogram_placeholder(_parse_markdown_table(table_md))
+    assert all(row[0] == "(pictogramme)" for row in rows[1:])
+    assert rows[1][1] == "Risque électrique"
+    assert rows[2][1] == "Risque mécanique"
 
 
 def test_section6_6_non_empty_columns_are_left_unchanged() -> None:
-    from ui.components.cards import _mark_empty_columns_as_pictogram
+    from ui.components.cards import (
+        _fill_empty_columns_with_pictogram_placeholder,
+        _parse_markdown_table,
+    )
 
     table_md = "| A | B |\n| --- | --- |\n| x | y |\n"
-    assert _mark_empty_columns_as_pictogram(table_md) == table_md
+    rows = _parse_markdown_table(table_md)
+    assert _fill_empty_columns_with_pictogram_placeholder(rows) == rows
+
+
+# --- M7.4b section 3: table preview never breaks on a leading-empty cell ---
+# --- or an escaped "|" inside a pictogram placeholder -----------------------
+
+
+def test_split_table_line_never_collapses_a_leading_empty_cell() -> None:
+    """A row whose FIRST cell is empty (stored with no padding spaces) must
+    not have `.strip("|")`'s double-strip shift every column left by one."""
+    from ui.components.cards import _split_table_line
+
+    assert _split_table_line("||Risque d'atmosphère explosive|") == [
+        "",
+        "Risque d'atmosphère explosive",
+    ]
+
+
+def test_split_table_line_unescapes_a_pipe_inside_a_pictogram_cell() -> None:
+    """A naive `.split("|")` would wrongly cut a cell containing an escaped
+    "\\|" (an M7.4 pictogram placeholder can legitimately contain one) in
+    two -- the column shift bug reported against the real pictogram
+    question's table preview."""
+    from ui.components.cards import _split_table_line
+
+    line = r"|[pictogramme \| triangle jaune]|Risque d'atmosphère explosive|"
+    assert _split_table_line(line) == [
+        "[pictogramme | triangle jaune]",
+        "Risque d'atmosphère explosive",
+    ]
+
+
+def test_split_table_line_tolerates_a_row_with_no_outer_pipes() -> None:
+    """The standalone table_row chunk's own row line has no outer pipes
+    (unlike the whole-table markdown's rows) -- both forms must parse to
+    the same cells."""
+    from ui.components.cards import _split_table_line
+
+    assert _split_table_line("Symbole|Description") == ["Symbole", "Description"]
+
+
+def test_parse_markdown_table_returns_none_for_non_table_text() -> None:
+    from ui.components.cards import _parse_markdown_table
+
+    assert _parse_markdown_table("Juste un passage de texte normal.") is None
+
+
+def test_parse_markdown_table_returns_none_for_a_bare_table_row_snippet() -> None:
+    """The standalone table_row chunk's own 2-line "header\\nrow" text (no
+    outer pipes, no separator row) is NOT itself a parseable table -- in
+    production _render_table_preview always resolves the full table via
+    table_id first, falling back to plain text only if that lookup fails."""
+    from ui.components.cards import _parse_markdown_table
+
+    assert _parse_markdown_table("Symbole|Description\n[pictogramme]|Risque") is None
 
 
 # --- Section 7: new user feedback after section 6 --------------------------

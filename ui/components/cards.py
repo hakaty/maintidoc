@@ -14,10 +14,12 @@ inside it. Every chip below is rendered as ONE escaped string with the icon
 """
 
 import html
+import re
 
 import streamlit as st
 
 from app.config import get_settings
+from app.rag.retriever import get_full_table_text
 from app.rag.service import CITATION_PATTERN, RAGAnswer
 from ui.format import fr_seconds
 from ui.icons import (
@@ -80,29 +82,43 @@ _VIEW_LABELS = {
 }
 
 
-def _mark_empty_columns_as_pictogram(table_markdown: str) -> str:
-    """Section 6.6 fix: a markdown-table column that is entirely empty
-    (e.g. a "Symbole" column whose cells are pictogram IMAGES the table
-    extractor couldn't capture as text) renders as a blank, confusing gap.
-    Display-only transform -- the stored table markdown (ingestion output)
-    is never modified, only the copy about to be shown in this expander."""
-    lines = [line for line in table_markdown.splitlines() if line.strip().startswith("|")]
-    if len(lines) < 2:
-        return table_markdown
+def _split_table_line(line: str) -> list[str]:
+    """One row of a pipe-delimited markdown table -> unescaped cell strings.
+    M7.4b fix: NEVER `.strip("|")` or a naive `.split("|")` -- a row whose
+    FIRST cell is empty (e.g. "||Risque...|") would have `.strip("|")`
+    collapse that cell's own delimiter too, shifting every column left by
+    one; and a cell containing an escaped "\\|" (an M7.4 pictogram
+    placeholder can legitimately contain one) would be wrongly split in two
+    by a plain `.split("|")`. Tolerates rows with or without the outer
+    pipes: the standalone table_row chunk's own row line has none, the
+    whole-table markdown's rows do."""
+    stripped = line.strip()
+    inner = stripped[1:-1] if stripped.startswith("|") and stripped.endswith("|") else stripped
+    cells = re.split(r"(?<!\\)\|", inner)
+    return [cell.strip().replace("\\|", "|") for cell in cells]
 
-    def _inner(line: str) -> str:
-        # Exactly one leading/trailing "|", never `.strip("|")`: a row whose
-        # FIRST cell is empty (e.g. "||Risque...|", the stored format has no
-        # padding spaces) would otherwise collapse that cell's own delimiter
-        # too, shifting every column left by one.
-        stripped = line.strip()
-        return stripped[1:-1] if stripped.startswith("|") and stripped.endswith("|") else stripped
 
-    rows = [[cell.strip() for cell in _inner(line).split("|")] for line in lines]
+def _parse_markdown_table(markdown: str) -> list[list[str]] | None:
+    """Header + data rows (separator row dropped), each a list of unescaped
+    cell strings -- or None if `markdown` isn't a well-formed table, so the
+    caller falls back to plain text instead of guessing at a broken parse."""
+    lines = [line for line in markdown.splitlines() if line.strip().startswith("|")]
+    if len(lines) < 3:
+        return None
+    rows = [_split_table_line(line) for line in lines]
     header, separator, *data_rows = rows
-    if not data_rows:
-        return table_markdown
+    if not data_rows or not all(cell.strip("-: ") == "" for cell in separator):
+        return None
+    return [header, *data_rows]
 
+
+def _fill_empty_columns_with_pictogram_placeholder(rows: list[list[str]]) -> list[list[str]]:
+    """Section 6.6 fix: a column whose cells are ALL empty (e.g. a "Symbole"
+    column made of pictogram IMAGES the table extractor couldn't capture as
+    text) renders as a blank, confusing gap -- show a placeholder instead."""
+    header, *data_rows = rows
+    if not data_rows:
+        return rows
     n_cols = len(header)
     empty_cols = {
         col
@@ -110,17 +126,62 @@ def _mark_empty_columns_as_pictogram(table_markdown: str) -> str:
         if all(not (row[col] if col < len(row) else "") for row in data_rows)
     }
     if not empty_cols:
-        return table_markdown
-
-    placeholder = "*(pictogramme)*"
+        return rows
+    placeholder = "(pictogramme)"
     new_data_rows = [
         [placeholder if col in empty_cols else cell for col, cell in enumerate(row)]
         for row in data_rows
     ]
-    new_lines = [
-        "| " + " | ".join(row) + " |" for row in (header, separator, *new_data_rows)
-    ]
-    return "\n".join(new_lines)
+    return [header, *new_data_rows]
+
+
+def _render_table_html(rows: list[list[str]], highlight_row: list[str] | None) -> None:
+    """Render parsed table rows as a real HTML table (never by re-splitting
+    a markdown string a second time) so the cited row can get its own
+    background -- `st.markdown` of raw markdown has no per-row styling hook.
+    Every cell is model/document-derived (untrusted), hence escaped."""
+    header, *data_rows = rows
+    parts = ['<table style="width:100%;border-collapse:collapse;font-size:14px;">', "<thead><tr>"]
+    for cell in header:
+        parts.append(
+            '<th style="text-align:left;padding:6px 8px;border-bottom:2px solid #D7DEE7;">'
+            f"{html.escape(cell)}</th>"
+        )
+    parts.append("</tr></thead><tbody>")
+    for row in data_rows:
+        row_style = "background-color:#E5F0F4;" if row == highlight_row else ""
+        parts.append(f'<tr style="{row_style}">')
+        for cell in row:
+            parts.append(
+                '<td style="padding:6px 8px;border-bottom:1px solid #EEF1F4;">'
+                f"{html.escape(cell)}</td>"
+            )
+        parts.append("</tr>")
+    parts.append("</tbody></table>")
+    st.markdown("".join(parts), unsafe_allow_html=True)
+
+
+def _render_table_preview(
+    content_type: str | None,
+    page: int | None,
+    full_text: str | None,
+    snippet: str,
+    table_id: str | None,
+) -> None:
+    """"Voir le tableau": always the WHOLE table (M7.4b section 3), with the
+    cited row highlighted when the citation pinned down one specific row."""
+    full_table_text = get_full_table_text(table_id, get_settings()) if table_id else None
+    source_text = full_table_text or full_text or snippet
+    rows = _parse_markdown_table(source_text)
+    if rows is None:
+        st.text(full_text or snippet)
+        return
+    rows = _fill_empty_columns_with_pictogram_placeholder(rows)
+    highlight_row = None
+    if content_type == "table_row" and (full_text or snippet):
+        row_line = (full_text or snippet).strip().splitlines()[-1]
+        highlight_row = _split_table_line(row_line)
+    _render_table_html(rows, highlight_row)
 
 
 def render_source_row(
@@ -130,6 +191,7 @@ def render_source_row(
     full_text: str | None = None,
     image_path: str | None = None,
     pdf_path: str | None = None,
+    table_id: str | None = None,
 ) -> None:
     """One compact source row (section 6.3 fix): icon + mono "p. N" chip +
     type label, all on ONE line via a single HTML block -- not split across
@@ -152,19 +214,18 @@ def render_source_row(
     with st.expander(view_label, icon=f":material/{material_icon}:"):
         if image_path:
             st.image(image_path, width="stretch", alt=f"Figure page {page}")
-        if content_type == "table":
-            table_md = _mark_empty_columns_as_pictogram(full_text or snippet)
+        if content_type in ("table", "table_row"):
             if pdf_path and page is not None:
                 thumb_cols = st.columns([3, 1])
                 with thumb_cols[0]:
-                    st.markdown(table_md)
+                    _render_table_preview(content_type, page, full_text, snippet, table_id)
                 with thumb_cols[1]:
                     thumbnail = get_page_thumbnail_png(pdf_path, page)
                     if thumbnail:
                         st.caption("Voir la page")
                         st.image(thumbnail, width="stretch")
             else:
-                st.markdown(table_md)
+                _render_table_preview(content_type, page, full_text, snippet, table_id)
         else:
             st.text(full_text or snippet)
 
@@ -381,9 +442,10 @@ def render_answer_meta(result: RAGAnswer, key_prefix: str = "answer") -> None:
             citation.page,
             citation.content_type,
             citation.snippet,
-            full_text=citation.snippet,
+            full_text=citation.full_text or citation.snippet,
             image_path=citation.image_path,
             pdf_path=pdf_path,
+            table_id=citation.table_id,
         )
     footer = st.columns([3, 1, 1])
     with footer[0]:

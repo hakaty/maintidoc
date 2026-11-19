@@ -6,17 +6,20 @@ renders after the user clicks the "Prendre une photo" ghost button, gated
 by a session_state flag.
 """
 
+import html
 import re
 import tempfile
 from pathlib import Path
 
 import streamlit as st
+from PIL import Image as PILImage
 
 from app.config import Settings
 from app.rag import service
 from app.rag.retriever import RetrievedNode, retrieve_by_image
 from ui.components.cards import render_answer
 from ui.components.uploads import UploadValidationError, strip_exif_and_save, validate_image_bytes
+from ui.format import fr_decimal
 
 TEMP_UPLOAD_DIR = Path(tempfile.gettempdir()) / "maintidoc_uploads"
 _CONTENT_LABELS = {"text": "passage", "table": "tableau", "image_description": "figure"}
@@ -49,23 +52,66 @@ def _save_uploaded_image(data: bytes) -> Path:
     return strip_exif_and_save(data, TEMP_UPLOAD_DIR)
 
 
-def _render_match_card(match: RetrievedNode, is_best: bool) -> None:
+def _flatten_to_white(image_path: str) -> PILImage.Image | str:
+    """M7.4b section 4 fix: a figure PNG with an alpha channel was rendered
+    on a BLACK background by st.image (the browser's default behind a
+    transparent PNG), making several figures (p. 23, p. 24, p. 10) almost
+    unreadable. Composite onto an opaque WHITE canvas before display -- the
+    same fix belongs at extraction time too, but this guarantees the UI
+    never shows black regardless of where a transparent PNG came from.
+    Falls back to the raw path (unchanged behaviour) if the file can't be
+    opened as an image, instead of crashing."""
+    try:
+        with PILImage.open(image_path) as img:
+            if img.mode not in ("RGBA", "LA", "PA"):
+                return image_path
+            rgba = img.convert("RGBA")
+            background = PILImage.new("RGB", rgba.size, (255, 255, 255))
+            background.paste(rgba, mask=rgba.split()[-1])
+            return background
+    except OSError:
+        return image_path
+
+
+def _render_match_card(match: RetrievedNode, is_best: bool, needs_review: bool = False) -> None:
     label = _CONTENT_LABELS.get(match.content_type or "", match.content_type or "")
     clamped_caption, full_caption = _clean_figure_caption(match.text)
     with st.container(border=True):
         if is_best:
             st.badge("Meilleure correspondance", icon=":material/star:", color="blue")
+        elif needs_review:
+            # M7.4b section 4 fix: a result scoring between image_min_score
+            # and image_review_score must NOT look identical to a confident
+            # match -- a muted card + a small amber-outline label instead.
+            st.markdown(
+                '<span style="display:inline-flex;align-items:center;gap:4px;'
+                "font-size:12px;color:#92600A;border:1px solid #E8B339;"
+                'border-radius:9999px;padding:2px 10px;">À vérifier</span>',
+                unsafe_allow_html=True,
+            )
         cols = st.columns([1, 2])
         with cols[0]:
             if match.image_path:
-                st.image(match.image_path, width="stretch", alt=f"Figure page {match.page}")
+                st.image(
+                    _flatten_to_white(match.image_path),
+                    width="stretch",
+                    alt=f"Figure page {match.page}",
+                )
         with cols[1]:
+            # M7.4b section 4 fix: "p. N" and "figure" at the SAME font size,
+            # with a non-breaking space between "p." and the number (same
+            # pattern as ui/components/cards.py::render_source_row).
             st.markdown(
-                f'<span class="md-mono">p. {match.page}</span> · {label}',
+                f'<span class="md-mono" style="font-size:14px;">p.&nbsp;{match.page}</span>'
+                f'<span style="font-size:14px;"> · {html.escape(label)}</span>',
                 unsafe_allow_html=True,
             )
             st.progress(max(0.0, min(1.0, float(match.score))))
-            st.markdown(f'<span class="md-mono">{match.score:.3f}</span>', unsafe_allow_html=True)
+            # French decimal format everywhere (section 4 fix): "0,846", not
+            # "0.846".
+            st.markdown(
+                f'<span class="md-mono">{fr_decimal(match.score)}</span>', unsafe_allow_html=True
+            )
             st.caption(clamped_caption)
             if full_caption != clamped_caption:
                 with st.expander("Voir plus", icon=":material/expand_more:"):
@@ -80,6 +126,14 @@ def is_above_rejection_threshold(matches: list[RetrievedNode], settings: Setting
     if not matches:
         return False
     return matches[0].score >= settings.image_min_score
+
+
+def needs_review(score: float, settings: Settings) -> bool:
+    """Pure decision function (M7.4b section 2/4 "middle zone"): a score
+    at/above image_min_score but below image_review_score is a real
+    candidate, not confidently a match -- shown as "À vérifier" rather than
+    treated the same as a confident result."""
+    return score < settings.image_review_score
 
 
 def _render_rejection_empty_state() -> None:
@@ -98,22 +152,31 @@ def _render_rejection_empty_state() -> None:
 def _render_results(matches: list[RetrievedNode], settings: Settings) -> None:
     """Section 3 UI: the "Meilleure correspondance" badge, and the results
     themselves, only appear above IMAGE_MIN_SCORE -- below it, the match is
-    shown (if at all) only inside a collapsed "Résultats peu fiables"
-    expander, with no badge on any of them."""
+    shown (if at all) only inside a COLLAPSED "Résultats peu fiables"
+    expander (section 4 fix: `expanded=False` made explicit), with no badge
+    on any of them. M7.4b section 4 "middle zone": once accepted, a result
+    scoring between image_min_score and image_review_score is still shown,
+    but flagged "À vérifier" instead of looking identical to the best
+    match."""
     if not matches or not is_above_rejection_threshold(matches, settings):
         _render_rejection_empty_state()
         if matches:
-            with st.expander(f"Résultats peu fiables ({len(matches)})", icon=":material/info:"):
+            with st.expander(
+                f"Résultats peu fiables ({len(matches)})",
+                icon=":material/info:",
+                expanded=False,
+            ):
                 st.caption(
-                    f"Score sous le seuil de fiabilité ({settings.image_min_score:.2f}) -- "
-                    "probablement pas une figure du manuel."
+                    f"Score sous le seuil de fiabilité ({fr_decimal(settings.image_min_score, 2)}) "
+                    "-- probablement pas une figure du manuel."
                 )
                 for match in matches:
                     _render_match_card(match, is_best=False)
         return
 
     for i, match in enumerate(matches):
-        _render_match_card(match, is_best=(i == 0))
+        review = i > 0 and needs_review(match.score, settings)
+        _render_match_card(match, is_best=(i == 0), needs_review=review)
 
 
 def render_image_search_tab(settings: Settings) -> None:

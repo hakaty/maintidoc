@@ -342,3 +342,68 @@ def test_adaptive_expansion_triggered_when_original_score_is_weak(
     result = retriever_module.retrieve("question", settings=settings)
 
     assert result.reformulations == ["reformulation"]
+
+
+# --- M7.4b section 1: table_row crowding fix --------------------------------
+
+
+def _retrieved(node_id: str, page: int, content_type: str, score: float):
+    return retriever_module.RetrievedNode(
+        node_id=node_id,
+        page=page,
+        content_type=content_type,
+        score=score,
+        text="x",
+        image_id=None,
+        image_path=None,
+        safety_relevant=None,
+    )
+
+
+def test_cap_table_rows_per_page_keeps_only_the_best_row_per_page() -> None:
+    nodes = [
+        _retrieved("r1", 37, "table_row", 0.9),
+        _retrieved("r2", 37, "table_row", 0.8),  # same page as r1 -- dropped
+        _retrieved("t1", 27, "text", 0.7),
+        _retrieved("r3", 40, "table_row", 0.6),
+    ]
+
+    kept = retriever_module._cap_table_rows_per_page(nodes)
+
+    assert [n.node_id for n in kept] == ["r1", "t1", "r3"]
+
+
+def test_cap_table_rows_per_page_never_touches_non_table_row_nodes() -> None:
+    nodes = [
+        _retrieved("t1", 5, "table", 0.9),
+        _retrieved("t2", 5, "table", 0.8),  # same page, but not table_row -- kept
+    ]
+
+    kept = retriever_module._cap_table_rows_per_page(nodes)
+
+    assert [n.node_id for n in kept] == ["t1", "t2"]
+
+
+def test_retrieve_fetches_more_raw_candidates_than_it_keeps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M7.4b regression fix (qa16): several table_row hits from the SAME
+    table could previously fill the first `k` raw results, pushing the one
+    correct text chunk out of the window entirely before any de-duplication
+    had a chance to run. retrieve() now asks the store for more than `k`
+    raw candidates (capped at 10, app.agent.tools.MAX_K's ceiling --
+    test_agent_tools.py::test_k_argument_is_capped pins that ceiling)."""
+    node = _node("n1", 4, "text", "contenu")
+    captured: list[int] = []
+
+    class _CapturingStore(_FakeTextStore):
+        def query(self, vs_query):
+            captured.append(vs_query.similarity_top_k)
+            return super().query(vs_query)
+
+    _patch_store(monkeypatch, _CapturingStore([node], [0.9]))
+    settings = _settings(rag_min_score=0.1, rag_max_nodes=3)
+
+    retriever_module.retrieve("question", k=3, settings=settings)
+
+    assert captured == [10]  # min(max(3, 3) * 4, 10)

@@ -1,12 +1,21 @@
-"""M7.4 sections 3 (image rejection) and 8.2 (clean captions, layout)."""
+"""M7.4 sections 3 (image rejection) and 8.2 (clean captions, layout);
+M7.4b sections 2 (recalibrated thresholds + middle zone) and 4 (image page
+polish: white-composited thumbnails, French score format, collapsed
+expander)."""
 
 from pathlib import Path
 
 import pytest
+from PIL import Image as PILImage
 
 from app.config import Settings
 from app.rag.retriever import RetrievedNode
-from ui.components.image_search import _clean_figure_caption, is_above_rejection_threshold
+from ui.components.image_search import (
+    _clean_figure_caption,
+    _flatten_to_white,
+    is_above_rejection_threshold,
+    needs_review,
+)
 
 
 def _settings(**overrides) -> Settings:
@@ -55,6 +64,62 @@ def test_decision_only_looks_at_top1_score() -> None:
     assert is_above_rejection_threshold(matches, settings) is True
 
 
+# --- M7.4b section 2/4: the "middle zone" -----------------------------------
+
+
+def test_score_below_review_threshold_needs_review() -> None:
+    settings = _settings(image_min_score=0.56, image_review_score=0.78)
+    assert needs_review(0.60, settings) is True
+
+
+def test_score_at_or_above_review_threshold_does_not_need_review() -> None:
+    settings = _settings(image_min_score=0.56, image_review_score=0.78)
+    assert needs_review(0.78, settings) is False
+    assert needs_review(0.90, settings) is False
+
+
+def test_score_just_above_min_but_below_review_is_still_accepted_not_rejected() -> None:
+    """A result in the middle zone is a real, shown candidate (just flagged
+    "a verifier") -- never treated as rejected."""
+    settings = _settings(image_min_score=0.56, image_review_score=0.78)
+    assert is_above_rejection_threshold([_match(0.60)], settings) is True
+    assert needs_review(0.60, settings) is True
+
+
+# --- M7.4b section 4: white-composited thumbnail ----------------------------
+
+
+def test_flatten_to_white_composites_transparent_png_onto_white(tmp_path: Path) -> None:
+    rgba = PILImage.new("RGBA", (4, 4), (0, 0, 0, 0))  # fully transparent
+    rgba.putpixel((1, 1), (10, 20, 30, 255))  # one opaque pixel
+    path = tmp_path / "transparent.png"
+    rgba.save(path)
+
+    result = _flatten_to_white(str(path))
+
+    assert isinstance(result, PILImage.Image)
+    out = result.convert("RGB")
+    assert out.getpixel((0, 0)) == (255, 255, 255)  # was transparent, now white
+    assert out.getpixel((1, 1)) == (10, 20, 30)
+
+
+def test_flatten_to_white_is_a_no_op_for_an_opaque_image(tmp_path: Path) -> None:
+    rgb = PILImage.new("RGB", (4, 4), (5, 5, 5))
+    path = tmp_path / "opaque.png"
+    rgb.save(path)
+
+    result = _flatten_to_white(str(path))
+
+    assert result == str(path)
+
+
+def test_flatten_to_white_falls_back_to_the_path_on_a_broken_file(tmp_path: Path) -> None:
+    path = tmp_path / "not_an_image.png"
+    path.write_bytes(b"not a real png")
+
+    assert _flatten_to_white(str(path)) == str(path)
+
+
 # --- section 8.2: clean, single, word-boundary-clamped caption -------------
 
 
@@ -101,17 +166,30 @@ def test_caption_short_text_is_not_clamped() -> None:
 
 @pytest.mark.integration
 def test_unrelated_image_is_rejected_by_the_real_threshold() -> None:
-    """A solid-colour image (nothing to do with the manual) must score
-    below the calibrated threshold against the real index."""
-    from PIL import Image
+    """An obviously unrelated bar chart must score below the recalibrated
+    threshold against the real index. M7.4b note: a plain SOLID COLOUR image
+    (used here before the section 2 recalibration) now scores just above
+    the lower image_min_score (0.56) -- the recalibration against a much
+    harder in-domain set (full-page "screen photo" simulations, not just
+    tight figure crops) legitimately moved the floor down, so solid colour
+    alone is no longer a reliable out-of-domain probe; a bar chart's score
+    stays well below the floor across the whole calibration run."""
+    from PIL import Image, ImageDraw
 
     from app.config import get_settings
     from app.rag.retriever import retrieve_by_image
 
     settings = get_settings()
-    tmp_path = Path("data/media") / "_test_unrelated_solid.png"
+    tmp_path = Path("data/media") / "_test_unrelated_bar_chart.png"
     try:
-        Image.new("RGB", (640, 480), (120, 180, 220)).save(tmp_path)
+        img = Image.new("RGB", (640, 480), (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        draw.line((60, 420, 600, 420), fill=(0, 0, 0), width=2)
+        draw.line((60, 420, 60, 40), fill=(0, 0, 0), width=2)
+        for i, height in enumerate([120, 280, 90, 340, 60, 200]):
+            x0 = 80 + i * 85
+            draw.rectangle((x0, 420 - height, x0 + 40, 420), fill=(31, 119, 180))
+        img.save(tmp_path)
         matches = retrieve_by_image(tmp_path, k=3, settings=settings)
     except Exception as exc:  # pragma: no cover - real stack unavailable
         pytest.skip(f"Real image-search stack unavailable: {exc}")

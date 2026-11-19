@@ -1,8 +1,10 @@
+import io
 from pathlib import Path
 
 import pytest
+from PIL import Image as PILImage
 
-from app.ingestion.extract_images import extract_images, image_to_node
+from app.ingestion.extract_images import _composite_smask_on_white, extract_images, image_to_node
 
 
 @pytest.fixture(scope="module")
@@ -85,3 +87,46 @@ def test_report_counts_by_kind(extraction) -> None:
         counts[image.kind] = counts.get(image.kind, 0) + 1
 
     assert counts == {"figure": 3, "icon": 1}
+
+
+def _png_bytes(image: "PILImage.Image") -> bytes:
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class _FakeDocWithSmask:
+    """M7.4b regression (p. 10/23/24 shown on black): Document.extract_image()
+    returns the base layer without applying its soft mask -- a real
+    PDF-authoring pattern where the base's "transparent" areas are filled
+    with black. This fakes just enough of pymupdf.Document for
+    _composite_smask_on_white to look up the mask by xref."""
+
+    def __init__(self, mask_image: "PILImage.Image") -> None:
+        self._mask_image = mask_image
+
+    def extract_image(self, xref: int) -> dict:
+        assert xref == 99
+        return {"image": _png_bytes(self._mask_image)}
+
+
+def test_composite_smask_on_white_replaces_black_fill_with_white() -> None:
+    base = PILImage.new("RGB", (4, 4), (0, 0, 0))  # all-black base layer
+    base.putpixel((1, 1), (10, 20, 30))  # the one real (opaque) pixel
+    mask = PILImage.new("L", (4, 4), 0)  # fully transparent...
+    mask.putpixel((1, 1), 255)  # ...except the one real pixel
+    doc = _FakeDocWithSmask(mask)
+
+    result = _composite_smask_on_white(doc, {"smask": 99}, _png_bytes(base))
+    out = PILImage.open(io.BytesIO(result)).convert("RGB")
+
+    assert out.getpixel((1, 1)) == (10, 20, 30)
+    assert out.getpixel((0, 0)) == (255, 255, 255)  # was black, now white
+
+
+def test_composite_smask_on_white_is_a_no_op_without_a_mask() -> None:
+    base = PILImage.new("RGB", (2, 2), (5, 5, 5))
+    data = _png_bytes(base)
+    doc = _FakeDocWithSmask(base)
+
+    assert _composite_smask_on_white(doc, {}, data) == data

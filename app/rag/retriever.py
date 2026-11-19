@@ -48,6 +48,7 @@ class RetrievedNode:
     image_id: str | None
     image_path: str | None
     safety_relevant: bool | None
+    table_id: str | None = None
 
 
 @dataclass
@@ -73,6 +74,7 @@ def _to_retrieved_node(node: BaseNode, score: float) -> RetrievedNode:
         image_id=meta.get("image_id"),
         image_path=meta.get("image_path"),
         safety_relevant=meta.get("safety_relevant"),
+        table_id=meta.get("table_id"),
     )
 
 
@@ -90,6 +92,32 @@ def _dedupe_by_best_score(
         seen.add(node.node_id)
         deduped.append(_to_retrieved_node(node, score))
     return deduped
+
+
+def _cap_table_rows_per_page(
+    nodes: list[RetrievedNode], max_per_page: int = 1
+) -> list[RetrievedNode]:
+    """M7.4b regression fix (qa16): row-level table chunks (M7.4 section 2.2)
+    are short and keyword-dense, so a table with several rows sharing a
+    generic domain word (e.g. several troubleshooting rows all mentioning
+    "moteur") can place MULTIPLE of its own rows in the top-k, crowding out
+    the one correct text chunk entirely before the token budget is even
+    applied -- confirmed by retrieving with k=20 for qa16 and finding the
+    correct page-34 text chunk at rank 13, behind 7+ table_row hits from 3
+    unrelated troubleshooting tables. Keeping only the single best-scoring
+    table_row per page preserves the feature (one row is always enough to
+    answer a question about that row) while freeing slots for other
+    content types, without changing any score."""
+    kept: list[RetrievedNode] = []
+    rows_kept_for_page: dict[int | None, int] = {}
+    for node in nodes:
+        if node.content_type == "table_row":
+            count = rows_kept_for_page.get(node.page, 0)
+            if count >= max_per_page:
+                continue
+            rows_kept_for_page[node.page] = count + 1
+        kept.append(node)
+    return kept
 
 
 def _rrf_fuse(ranked_lists: list[list[BaseNode]], k_rrf: int) -> list[BaseNode]:
@@ -144,6 +172,25 @@ def expand_query(question: str, settings: Settings) -> list[str]:
     if not isinstance(data, list):
         return []
     return [str(item).strip() for item in data if str(item).strip()][:3]
+
+
+def get_full_table_text(table_id: str, settings: Settings | None = None) -> str | None:
+    """M7.4b section 3 fix: the "Voir le tableau" preview must always show
+    the WHOLE table (all rows) with the cited row highlighted, never just
+    the single table_row chunk that happened to win the citation match --
+    look up the one "table" node for this table_id directly, by structured
+    metadata filter, instead of re-deriving it from any chunk's own text."""
+    settings = settings or get_settings()
+    store = get_text_store(settings)
+    filters = MetadataFilters(
+        filters=[
+            MetadataFilter(key="content_type", value="table"),
+            MetadataFilter(key="table_id", value=table_id),
+        ],
+        condition=FilterCondition.AND,
+    )
+    found = store.get_nodes(filters=filters)
+    return found[0].get_content() if found else None
 
 
 def _query_text_store(
@@ -209,9 +256,22 @@ def retrieve(
     settings = settings or get_settings()
     k = k or settings.rag_k
     store = get_text_store(settings)
+    # Fetch more raw candidates than the final budget keeps (M7.4b regression
+    # fix, qa16): short table_row chunks sharing a generic domain word can
+    # fill the first `k` raw hits with several rows from the SAME table,
+    # pushing the one correct text chunk past the fetch window before
+    # _cap_table_rows_per_page even gets a chance to diversify it back in.
+    # Oversampling the raw fetch costs nothing at the final best_score/
+    # context-size level -- only the top-1 score (unaffected by fetch depth)
+    # gates refusal, and _apply_budget still trims to rag_max_nodes after.
+    # Capped at 10 (app.agent.tools.MAX_K): the agent's own k-argument safety
+    # ceiling against a runaway LLM-requested k must still be respected at
+    # the actual vector-store-query level (test_k_argument_is_capped) -- this
+    # fix must never become a backdoor around that cap.
+    fetch_k = min(max(k, settings.rag_max_nodes) * 4, 10)
 
     nodes0, sims0 = _query_text_store(
-        question, store, k, mode, settings, content_type, pdf_sha256
+        question, store, fetch_k, mode, settings, content_type, pdf_sha256
     )
     best_score = max(sims0, default=0.0)
 
@@ -231,7 +291,7 @@ def retrieve(
         )
         for reform in reformulations:
             nodes_r, sims_r = _query_text_store(
-                reform, store, k, mode, settings, content_type, pdf_sha256
+                reform, store, fetch_k, mode, settings, content_type, pdf_sha256
             )
             ranked_lists.append(nodes_r)
             for node, score in zip(nodes_r, sims_r, strict=True):
@@ -239,6 +299,7 @@ def retrieve(
         fused_nodes = _rrf_fuse(ranked_lists, settings.rag_rrf_k)
         ordered = [_to_retrieved_node(n, similarity_by_id[n.node_id]) for n in fused_nodes]
 
+    ordered = _cap_table_rows_per_page(ordered)
     kept = _apply_budget(ordered, settings.rag_max_nodes, settings.rag_context_budget_tokens)
     return RetrievalResult(
         nodes=kept, best_score=best_score, refused=False, reformulations=reformulations
