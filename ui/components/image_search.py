@@ -114,7 +114,13 @@ def _render_match_card(match: RetrievedNode, is_best: bool, needs_review: bool =
             )
             st.caption(clamped_caption)
             if full_caption != clamped_caption:
-                with st.expander("Voir plus", icon=":material/expand_more:"):
+                # M7.4c fix: keyed by node_id -- several result cards render
+                # in the SAME run (up to 3 matches), and an unkeyed expander
+                # with an identical label+icon across them is a duplicate-
+                # element risk (same root cause as the chat history crash).
+                with st.expander(
+                    "Voir plus", icon=":material/expand_more:", key=f"figure_more_{match.node_id}"
+                ):
                     st.write(full_caption)
 
 

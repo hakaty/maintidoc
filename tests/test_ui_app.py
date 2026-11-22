@@ -1006,3 +1006,66 @@ def test_section7_3_suggestions_are_in_a_single_row_container() -> None:
     at = AppTest.from_file(APP_PATH)
     at.run(timeout=APP_TIMEOUT)
     assert "suggestions_row" in [c.key for c in at.get("container")]
+
+
+# --- M7.4c: unique widget keys across multiple messages in one conversation
+
+
+@pytest.mark.integration
+def test_three_questions_in_a_row_no_duplicate_key_crash() -> None:
+    """Real regression (M7.4c): asking a 2nd question in the same
+    conversation crashed with StreamlitDuplicateElementKey('answer_copy')
+    -- render_answer_meta() always used its default key_prefix="answer" for
+    every history entry. Simple, then Agent, then Simple: each answer must
+    render with NO exception and its OWN Copier/👍/👎 buttons (3 of each,
+    not deduplicated down to 1)."""
+    try:
+        at = AppTest.from_file(APP_PATH)
+        at.run(timeout=60)
+    except Exception as exc:  # pragma: no cover - real stack unavailable
+        pytest.skip(f"Real stack unavailable: {exc}")
+
+    # Reusing the 3 SUGGESTIONS questions -- already verified elsewhere
+    # (test_suggestions_are_verified_in_default_mode) to reliably answer,
+    # so a failure here points at the key-collision bug, not at answer
+    # quality/agent variance.
+    questions = list(chat_module.SUGGESTIONS.values())
+
+    _select_mode(at, "Simple")
+    at.chat_input[0].set_value(questions[0]).run(timeout=90)
+    assert not at.exception, f"Q1 (Simple) raised: {at.exception}"
+
+    _select_mode(at, "Agent")
+    at.chat_input[0].set_value(questions[1]).run(timeout=90)
+    assert not at.exception, f"Q2 (Agent) raised: {at.exception}"
+
+    _select_mode(at, "Simple")
+    at.chat_input[0].set_value(questions[2]).run(timeout=90)
+    assert not at.exception, f"Q3 (Simple) raised: {at.exception}"
+
+    copy_buttons = [b for b in at.button if b.label == "Copier"]
+    assert len(copy_buttons) == 3, f"expected 3 Copier buttons, found {len(copy_buttons)}"
+
+
+@pytest.mark.integration
+def test_suggestion_click_after_a_reset_no_duplicate_key_crash() -> None:
+    """A conversation, reset via "Nouvelle conversation", then a suggestion
+    click -- must not crash and must render that answer's own buttons."""
+    try:
+        at = AppTest.from_file(APP_PATH)
+        at.run(timeout=60)
+    except Exception as exc:  # pragma: no cover - real stack unavailable
+        pytest.skip(f"Real stack unavailable: {exc}")
+
+    _select_mode(at, "Simple")
+    at.chat_input[0].set_value("Quels sont les niveaux de danger ?").run(timeout=90)
+    assert not at.exception
+
+    reset_button = next(b for b in at.sidebar.button if b.label == "Nouvelle conversation")
+    reset_button.click().run(timeout=APP_TIMEOUT)
+    assert not at.exception
+
+    first_label = next(iter(chat_module.SUGGESTIONS))
+    at.button(key=f"suggestion_{first_label}").click().run(timeout=90)
+    assert not at.exception, f"Post-reset suggestion click raised: {at.exception}"
+    assert any(b.label == "Copier" for b in at.button)

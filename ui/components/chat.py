@@ -252,11 +252,22 @@ def render_assistant_tab(settings: Settings) -> None:
     with content_container:
         for entry in history:
             render_user_bubble(entry["question"])
+            # M7.4c fix: every widget rendered per answer (Copier, 👍/👎,
+            # "Voir le tableau"/"Voir le passage", the trace expander) must
+            # have a key unique PER MESSAGE -- a real crash
+            # (StreamlitDuplicateElementKey: key='answer_copy') hit on the
+            # 2nd question in a conversation, because render_answer_meta()
+            # was always called with its default key_prefix="answer" for
+            # EVERY history entry. `message_id` is assigned ONCE per entry
+            # (see below) and stored WITH the entry, not derived from the
+            # loop index, so keys stay stable even if history is ever
+            # filtered/reordered.
+            message_id = entry["message_id"]
 
-            def _render_past_answer(result=entry["result"]) -> None:
-                render_answer_text(result)
-                render_answer_meta(result)
-                render_trace(result)
+            def _render_past_answer(result=entry["result"], message_id=message_id) -> None:
+                render_answer_text(result, key_prefix=f"msg_{message_id}")
+                render_answer_meta(result, key_prefix=f"msg_{message_id}")
+                render_trace(result, key_prefix=f"msg_{message_id}")
 
             _render_history_message("assistant", _render_past_answer, ASSISTANT_AVATAR)
 
@@ -274,6 +285,10 @@ def render_assistant_tab(settings: Settings) -> None:
             render_empty_state(SUGGESTIONS, [])
 
         if question:
+            # M7.4c fix: assigned BEFORE rendering, so the brand-new
+            # exchange's widgets use the SAME unique key_prefix the history
+            # loop above will use for it on every later rerun.
+            message_id = uuid.uuid4().hex
             render_user_bubble(question)
             with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
                 if use_agent:
@@ -283,11 +298,11 @@ def render_assistant_tab(settings: Settings) -> None:
                     with st.status("Réflexion de l'agent…", expanded=False):
                         result = get_agent_answer(question, settings, session_id, image_path)
                     if result.error or result.refused:
-                        render_answer_text(result)
+                        render_answer_text(result, key_prefix=f"msg_{message_id}")
                     else:
                         st.markdown(result.answer)
-                    render_answer_meta(result)
-                    render_trace(result)
+                    render_answer_meta(result, key_prefix=f"msg_{message_id}")
+                    render_trace(result, key_prefix=f"msg_{message_id}")
                 else:
                     mode = st.session_state.get("rag_mode", "hybrid")
                     history_pairs = [
@@ -302,8 +317,8 @@ def render_assistant_tab(settings: Settings) -> None:
                     # streaming text IS the loading indicator here.
                     result = get_answer(question, settings, mode=mode, history=history_pairs)
                     if result.error or result.refused:
-                        render_answer_text(result)
+                        render_answer_text(result, key_prefix=f"msg_{message_id}")
                     if result.standalone_question and result.standalone_question != question:
                         st.caption(f"Question reformulée : « {result.standalone_question} »")
-                    render_answer_meta(result)
-            history.append({"question": question, "result": result})
+                    render_answer_meta(result, key_prefix=f"msg_{message_id}")
+            history.append({"question": question, "result": result, "message_id": message_id})

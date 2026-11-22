@@ -184,6 +184,52 @@ def _render_table_preview(
     _render_table_html(rows, highlight_row)
 
 
+SNIPPET_MAX_CHARS = 160
+_PICTOGRAM_CELL_PATTERN = re.compile(r"\[pictogramme(?:\s*:\s*(.*))?\]")
+
+
+def _clamp_word_boundary(text: str, max_chars: int = SNIPPET_MAX_CHARS) -> str:
+    """Never cuts mid-word -- an ellipsis at the nearest earlier space."""
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rsplit(" ", 1)[0] + "…"
+
+
+def _clean_table_snippet(
+    content_type: str | None, full_text: str | None, snippet: str
+) -> str:
+    """M7.4c fix: the one-line snippet under a table citation used to show
+    the RAW stored markdown verbatim ("Tableau (page 5) — Symboles
+    complémentaires Symbole|Description [pictogramme : Un triangle jaune
+    avec...") -- raw pipes, no spacing between the title and the header
+    row, cut mid-sentence by the old `snippet[:160]` slice. For a
+    table_row citation (the common case, a specific row), this shows just
+    that row's own description plus a clean pictogram description, e.g.
+    "Risque d'atmosphère explosive — triangle jaune avec « EX »". For a
+    whole-table citation (no specific row), it falls back to the table's
+    caption only. Never "|", never markdown, never cut mid-word."""
+    text = (full_text or snippet or "").strip()
+    lines = text.splitlines()
+    title_line = lines[0] if lines else ""
+    caption = title_line.split("—", 1)[1].strip() if "—" in title_line else title_line
+
+    if content_type != "table_row" or len(lines) < 2:
+        return _clamp_word_boundary(caption or snippet)
+
+    cells = _split_table_line(lines[-1])
+    description = None
+    pictogram_text = None
+    for cell in cells:
+        match = _PICTOGRAM_CELL_PATTERN.fullmatch(cell.strip())
+        if match:
+            pictogram_text = (match.group(1) or "").strip()
+        elif cell.strip():
+            description = cell.strip()
+    parts = [p for p in (description, pictogram_text) if p]
+    return _clamp_word_boundary(" — ".join(parts)) if parts else _clamp_word_boundary(caption)
+
+
 def render_source_row(
     page: int | None,
     content_type: str | None,
@@ -192,11 +238,15 @@ def render_source_row(
     image_path: str | None = None,
     pdf_path: str | None = None,
     table_id: str | None = None,
+    key: str = "src",
 ) -> None:
     """One compact source row (section 6.3 fix): icon + mono "p. N" chip +
     type label, all on ONE line via a single HTML block -- not split across
     a wide/narrow st.columns pair, which pushed the icon and page number far
-    apart. The snippet/"Voir ..." expander (native widgets) follow below."""
+    apart. The snippet/"Voir ..." expander (native widgets) follow below.
+    `key` must be unique per (message, citation) -- M7.4c fix: a real crash
+    hit when several source rows across different messages all used the
+    same auto-generated expander identity."""
     label, icon_svg = _badge_label(content_type)
     # Section 7.4 fix: "p. N" and the type label use the SAME size (14px)
     # and weight -- "p. N" was previously 16px/600 (bold), visually
@@ -208,10 +258,13 @@ def render_source_row(
         "</div>",
         unsafe_allow_html=True,
     )
-    st.caption(snippet[:160])
+    if content_type in ("table", "table_row"):
+        st.caption(_clean_table_snippet(content_type, full_text, snippet))
+    else:
+        st.caption(snippet[:160])
     view_label = _VIEW_LABELS.get(content_type or "text", "Voir le passage")
     material_icon = MATERIAL_ICONS.get(content_type or "text", "description")
-    with st.expander(view_label, icon=f":material/{material_icon}:"):
+    with st.expander(view_label, icon=f":material/{material_icon}:", key=f"{key}_expander"):
         if image_path:
             st.image(image_path, width="stretch", alt=f"Figure page {page}")
         if content_type in ("table", "table_row"):
@@ -295,7 +348,17 @@ def render_timings_caption(result: RAGAnswer) -> None:
     tabular-nums` instead of switching font family, and `white-space:nowrap`
     on each segment so a segment never breaks mid-text -- only the GAP
     between segments can wrap. The short model label keeps the line short;
-    the full id is still available as a native browser tooltip."""
+    the full id is still available as a native browser tooltip.
+
+    M7.4c fix: at a normal laptop width (~1366px, sidebar open) the line
+    still wrapped, with "Qwen 7B · Ollama" (the whole last segment) pushed
+    to a second line -- the 3-segment line was simply too wide for the
+    footer column at that width. Dropping "· Ollama" from the VISIBLE text
+    (it stays in the tooltip, same as the full model id already did) frees
+    enough width that the line fits on one row at that width; the
+    Copier/👍/👎 column next to it only drops to its own row below
+    Streamlit's own narrow-viewport column-stacking breakpoint (~600px),
+    which is native `st.columns` behaviour, not custom CSS."""
     retrieval = fr_seconds(result.timings.get("retrieval_ms"))
     generation = fr_seconds(result.timings.get("generation_ms"))
     nowrap_nums = 'style="white-space:nowrap;font-variant-numeric:tabular-nums;"'
@@ -308,11 +371,13 @@ def render_timings_caption(result: RAGAnswer) -> None:
     provider_label = {"ollama": "Ollama", "openrouter": "OpenRouter"}.get(
         result.provider, result.provider
     )
-    full_model_title = html.escape(f"{result.model} · {result.provider}")
-    parts.append(
-        f'<span style="white-space:nowrap;" title="{full_model_title}">'
-        f"{short_model} · {provider_label}</span>"
-    )
+    # M7.4c fix: "· Ollama" dropped from the VISIBLE text (was the segment
+    # that got pushed to a 2nd line at ~1366px) -- the provider still shows
+    # in the tooltip, just more readable here ("Ollama") than the raw
+    # settings value ("ollama").
+    full_model_title = html.escape(f"{result.model} · {provider_label}")
+    span = f'<span style="white-space:nowrap;" title="{full_model_title}">{short_model}</span>'
+    parts.append(span)
     st.markdown(
         '<span style="font-size:12px;color:#5B6675;">' + " · ".join(parts) + "</span>",
         unsafe_allow_html=True,
@@ -364,12 +429,16 @@ def _inline_citations_as_chips_html(answer_text: str) -> str:
     return CITATION_PATTERN.sub(_replace, escaped)
 
 
-def render_answer_text(result: RAGAnswer) -> None:
-    """The answer text itself (or the error/refusal card in its place)."""
+def render_answer_text(result: RAGAnswer, key_prefix: str = "answer") -> None:
+    """The answer text itself (or the error/refusal card in its place).
+    `key_prefix` must be unique per message (M7.4c fix) -- the "Réessayer"
+    button's key otherwise defaults to the same static string for every
+    errored message in history."""
     if result.error:
         render_error_card(
             f"{result.error}. Vérifiez que Ollama/OpenRouter et la base de données sont "
-            "bien disponibles (voir docker compose up -d db && ollama serve), puis réessayez."
+            "bien disponibles (voir docker compose up -d db && ollama serve), puis réessayez.",
+            retry_key=f"{key_prefix}_retry",
         )
     elif result.refused:
         render_refusal_card(result.answer)
@@ -403,14 +472,18 @@ TOOL_LABELS = {
 }
 
 
-def render_trace(result: RAGAnswer) -> None:
+def render_trace(result: RAGAnswer, key_prefix: str = "answer") -> None:
     """Agent trace: shown whenever at least one tool call happened (success,
     refusal after re-search, or fallback) -- never raw chain-of-thought,
-    only tool name/args/result count/duration."""
+    only tool name/args/result count/duration. `key_prefix` must be unique
+    per message (M7.4c fix) -- without an explicit key, several expanders
+    with an identical label across messages can collide."""
     if not result.tool_calls:
         return
     with st.expander(
-        f"Recherches effectuées ({len(result.tool_calls)})", icon=":material/travel_explore:"
+        f"Recherches effectuées ({len(result.tool_calls)})",
+        icon=":material/travel_explore:",
+        key=f"{key_prefix}_trace",
     ):
         for call in result.tool_calls:
             label = TOOL_LABELS.get(call["tool"], call["tool"])
@@ -437,7 +510,7 @@ def render_answer_meta(result: RAGAnswer, key_prefix: str = "answer") -> None:
     # are enough.
     st.markdown("**Source(s)**")
     pdf_path = str(get_settings().pdf_path)
-    for citation in result.citations:
+    for i, citation in enumerate(result.citations):
         render_source_row(
             citation.page,
             citation.content_type,
@@ -446,6 +519,7 @@ def render_answer_meta(result: RAGAnswer, key_prefix: str = "answer") -> None:
             image_path=citation.image_path,
             pdf_path=pdf_path,
             table_id=citation.table_id,
+            key=f"{key_prefix}_src_{i}",
         )
     footer = st.columns([3, 1, 1])
     with footer[0]:
@@ -461,7 +535,7 @@ def render_answer_meta(result: RAGAnswer, key_prefix: str = "answer") -> None:
 def render_answer(result: RAGAnswer, key_prefix: str = "answer") -> None:
     """Full render (text + metadata): used whenever the text hasn't already
     been streamed/rendered earlier in this script run."""
-    render_answer_text(result)
+    render_answer_text(result, key_prefix=key_prefix)
     render_answer_meta(result, key_prefix=key_prefix)
 
 

@@ -379,6 +379,126 @@ def _capture_document(page, base_url: str, out_prefix: str, server_log: str) -> 
     return out
 
 
+def _check_no_error_card_or_traceback(page, server_log: str, capture: str) -> None:
+    """M7.4c fix: the 2nd question in a conversation crashed with
+    StreamlitDuplicateElementKey -- this is the real-browser flow that
+    would have caught it (AppTest alone didn't, since the earlier M7.4/
+    M7.4b verification only ever asked ONE question per fresh AppTest
+    instance)."""
+    body_text = page.locator("body").inner_text()
+    _record(
+        capture,
+        "no_error_card_on_page",
+        "Une erreur est survenue" not in body_text,
+    )
+    _record(
+        capture,
+        "no_traceback_in_server_log",
+        "Traceback (most recent call last)" not in server_log
+        and "DuplicateElementKey" not in server_log,
+    )
+
+
+def _capture_multi_question_conversation(
+    page, base_url: str, out_prefix: str, server_log: str
+) -> Path:
+    """M7.4c required flow: 3 questions in the SAME conversation (Simple,
+    then Agent, then Simple), Copier clicked on the 2nd answer, "Voir le
+    tableau" expanded on the 1st -- the exact real-user sequence that hit
+    StreamlitDuplicateElementKey('answer_copy') before the fix (every
+    answer's widgets shared the same default key_prefix)."""
+    page.goto(base_url)
+    page.wait_for_selector("text=MaintiDoc", timeout=90_000)
+    chat_input = page.get_by_placeholder("Posez votre question sur le manuel…")
+
+    page.get_by_role("button", name="Classe de résistance du béton ?").click()
+    page.wait_for_selector("text=Réponse vérifiée", timeout=90_000)
+
+    # M7.4c: a button's ACCESSIBLE NAME includes its material-icon glyph
+    # text alongside the label (e.g. "content_copy Copier") -- an exact
+    # `get_by_role("button", name="Copier")` match (Python locator AND the
+    # equivalent JS `.innerText === 'Copier'`) silently finds 0 matches, so
+    # EVERY count/locator below matches on substring ("Copier" in ...),
+    # never exact equality.
+    copier_buttons = page.locator("button", has_text="Copier")
+
+    def _copier_count() -> int:
+        return copier_buttons.count()
+
+    def _wait_for_exchange(baseline_copier_count: int, timeout_ms: int) -> None:
+        # The message count alone can't confirm completion either (the
+        # assistant's `stChatMessage` container opens immediately, before
+        # the agent/model finishes) -- wait for the Copier count to grow
+        # past its value BEFORE this submit, OR a refusal/error marker,
+        # whichever outcome this particular question gets.
+        page.wait_for_function(
+            """count => {
+                const copierButtons = [...document.querySelectorAll('button')]
+                    .filter(b => b.innerText.includes('Copier')).length;
+                const t = document.body.innerText;
+                return copierButtons > count
+                    || t.includes('Le manuel ne répond pas')
+                    || t.includes('Une erreur est survenue');
+            }""",
+            arg=baseline_copier_count,
+            timeout=timeout_ms,
+        )
+
+    before_q2 = _copier_count()
+    page.get_by_role("radio", name="Agent").click()
+    page.wait_for_timeout(500)  # let the mode-switch rerun settle before filling
+    chat_input.fill("Quel pictogramme de sécurité signale un risque d'atmosphère explosive ?")
+    chat_input.press("Enter")
+    # Very generous margin above agent_timeout_seconds=90: under real
+    # machine load (GPU/Ollama contention from other processes), the
+    # agent's own internal tool-calling loop and the fallback-to-simple-RAG
+    # path after its server-side cutoff can both take far longer than on an
+    # idle machine -- observed up to several minutes during development.
+    _wait_for_exchange(before_q2, 300_000)
+
+    before_q3 = _copier_count()
+    page.get_by_role("radio", name="Simple").click()
+    page.wait_for_timeout(500)
+    chat_input.fill("Comment installer la pompe verticalement ?")
+    chat_input.press("Enter")
+    _wait_for_exchange(before_q3, 120_000)
+    page.wait_for_timeout(500)
+
+    copier_buttons.nth(1).click()
+    voir_tableau = page.locator("button", has_text="Voir le tableau").first
+    if voir_tableau.count():
+        voir_tableau.click()
+        page.wait_for_timeout(500)
+
+    out = OUTPUT_DIR / f"{out_prefix}.png"
+    page.screenshot(path=str(out), full_page=True)
+    _check_no_error_card_or_traceback(page, server_log, out_prefix)
+    return out
+
+
+def _capture_image_search_twice(page, base_url: str, out_prefix: str, server_log: str) -> Path:
+    """M7.4c required flow: two searches in a row on the image page --
+    checks the "Voir plus" expander's key (now keyed by node_id) doesn't
+    collide across repeated searches."""
+    page.goto(base_url)
+    page.wait_for_selector("text=MaintiDoc", timeout=90_000)
+    page.get_by_role("link", name="Recherche par image").click()
+    page.wait_for_selector("text=Votre image", timeout=30_000)
+
+    page.set_input_files("input[type=file]", str(FIXTURE_IMAGE))
+    page.wait_for_selector("text=Meilleure correspondance", timeout=300_000)
+
+    page.set_input_files("input[type=file]", str(_build_unrelated_diagram_fixture()))
+    page.wait_for_selector(
+        "text=Aucune figure du manuel ne ressemble à cette image.", timeout=300_000
+    )
+
+    out = OUTPUT_DIR / f"{out_prefix}.png"
+    page.screenshot(path=str(out), full_page=True)
+    _check_no_error_card_or_traceback(page, server_log, out_prefix)
+    return out
+
+
 def _capture_all(pw, browser, args, base_url: str, port: int) -> str:
     """Runs every capture using the ONE browser instance passed in. Returns
     the Streamlit server's captured stdout/stderr log (for the theme-error
@@ -446,6 +566,31 @@ def _capture_all(pw, browser, args, base_url: str, port: int) -> str:
             finally:
                 context.close()
 
+        # M7.4c required flows: a real conversation (3 questions, Simple/
+        # Agent/Simple, Copier + "Voir le tableau" clicked) and 2 image
+        # searches in a row -- the exact sequences that hit the real
+        # StreamlitDuplicateElementKey crash, run every time this script
+        # runs. EACH gets its OWN fresh context/session (not the shared
+        # per-scheme page above, which already has non-empty chat history
+        # and search results by this point -- reusing it made the "Q1"
+        # suggestion click silently a no-op against leftover state from an
+        # earlier capture, which is what caused this flow to hang).
+        multi_q_context = browser.new_context(viewport=VIEWPORT, color_scheme="light")
+        try:
+            _capture_multi_question_conversation(
+                multi_q_context.new_page(), base_url, "1-assistant-multi-question-light", ""
+            )
+        finally:
+            multi_q_context.close()
+
+        twice_context = browser.new_context(viewport=VIEWPORT, color_scheme="light")
+        try:
+            _capture_image_search_twice(
+                twice_context.new_page(), base_url, "2-recherche-image-twice-light", ""
+            )
+        finally:
+            twice_context.close()
+
         # 1920px answered state (light only, per the task's explicit ask).
         wide_context = browser.new_context(viewport=VIEWPORT_WIDE, color_scheme="light")
         try:
@@ -491,6 +636,19 @@ def main(argv: list[str] | None = None) -> int:
     if "StreamlitInvalidThemeOptionError" in server_log:
         for i, (capture, check, _passed, detail) in enumerate(CHECK_RESULTS):
             if check == "no_theme_option_error":
+                CHECK_RESULTS[i] = (capture, check, False, detail)
+
+    # M7.4c fix: same retroactive pattern as the theme-error check above --
+    # the multi-question/multi-search flows record their log-dependent
+    # check against "" at call time (the real server log is only available
+    # after the process is terminated), then get corrected here against the
+    # final captured log.
+    has_traceback = (
+        "Traceback (most recent call last)" in server_log or "DuplicateElementKey" in server_log
+    )
+    if has_traceback:
+        for i, (capture, check, _passed, detail) in enumerate(CHECK_RESULTS):
+            if check == "no_traceback_in_server_log":
                 CHECK_RESULTS[i] = (capture, check, False, detail)
 
     # Compare images (ref | app), one per page.
