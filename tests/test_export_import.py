@@ -25,7 +25,7 @@ def test_export_zip_excludes_env_and_models_and_contains_data(
 
     captured_cmd = {}
 
-    def _fake_run(cmd, stdout=None, check=None):
+    def _fake_run(cmd, stdout=None, check=None, env=None):
         captured_cmd["cmd"] = cmd
         if stdout is not None:
             stdout.write(b"-- fake dump\n")

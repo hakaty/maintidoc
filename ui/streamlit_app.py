@@ -166,7 +166,25 @@ def main() -> None:
         for p in pages:
             st.page_link(p)
 
-    settings = get_settings()
+    # M7.5 section 5 fix: Settings() raises (via a pydantic validator) when
+    # LLM_PROVIDER=openrouter and OPENROUTER_API_KEY is empty -- previously
+    # uncaught here, crashing the whole page with a raw Python traceback
+    # instead of a clear message (hit when simulating the no-GPU colleague's
+    # setup without inventing a real key). Never logs/prints the exception
+    # text itself (it could echo back .env content) -- only a fixed,
+    # pre-written French sentence.
+    try:
+        settings = get_settings()
+    except Exception as exc:  # noqa: BLE001 -- surfaced as a calm error card, never a traceback
+        if "OPENROUTER_API_KEY" in str(exc):
+            render_error_card(
+                "Clé OpenRouter manquante — ajoutez OPENROUTER_API_KEY dans .env"
+            )
+        else:
+            render_error_card(
+                "Configuration invalide. Vérifiez votre fichier .env (voir .env.example)."
+            )
+        st.stop()
     sidebar_state = render_sidebar(settings, show_new_conversation=(page.title == "Assistant"))
     settings = _settings_for_provider(settings, sidebar_state.provider)
     settings.rag_k = sidebar_state.k

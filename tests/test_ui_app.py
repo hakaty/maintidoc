@@ -220,6 +220,55 @@ def test_app_loads_without_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not at.exception
 
 
+def test_m75_missing_openrouter_key_shows_clear_french_message_not_a_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M7.5 section 5: simulating the no-GPU colleague's setup with
+    LLM_PROVIDER=openrouter and no OPENROUTER_API_KEY must show a clear
+    French message, never an unhandled Settings() ValidationError
+    traceback."""
+
+    def _broken_settings() -> Settings:
+        return Settings(_env_file=None, llm_provider="openrouter", openrouter_api_key="")
+
+    monkeypatch.setattr("app.config.get_settings", _broken_settings)
+    at = AppTest.from_file(APP_PATH)
+    at.run(timeout=APP_TIMEOUT)
+
+    assert not at.exception
+    full_text = "\n".join(m.value for m in at.markdown)
+    assert "Clé OpenRouter manquante" in full_text
+    assert "OPENROUTER_API_KEY" in full_text
+    assert ".env" in full_text
+
+
+def test_m75_document_upload_section_stays_open_after_selecting_a_file() -> None:
+    """M7.5 section 4 real regression, found by driving the full upload
+    flow end-to-end in a real Docker container: the import section's
+    visibility depended on the "Importer un autre PDF" button's TRANSIENT
+    return value (True only on the exact rerun it was clicked), not
+    persisted state. Selecting a file in the uploader triggers its OWN
+    rerun, on which the button's return value is False again -- hiding the
+    whole section (file_uploader AND "Indexer ce document") right when the
+    user tries to use it, so "Indexer ce document" could never be clicked."""
+    at = AppTest.from_file(APP_PATH)
+    at.run(timeout=APP_TIMEOUT)
+    at.switch_page(DOCUMENT_PAGE).run(timeout=APP_TIMEOUT)
+    assert not at.exception
+
+    import_button = next(b for b in at.button if b.label == "Importer un autre PDF")
+    import_button.click().run(timeout=APP_TIMEOUT)
+    assert len(at.file_uploader) == 1
+
+    at.file_uploader[0].set_value(("upload_test.pdf", b"%PDF-1.4 fake", "application/pdf")).run(
+        timeout=APP_TIMEOUT
+    )
+    assert not at.exception
+    assert any(b.label == "Indexer ce document" for b in at.button), (
+        "the upload section disappeared after selecting a file"
+    )
+
+
 def test_sidebar_navigation_has_three_pages_reachable_by_switch_page() -> None:
     at = AppTest.from_file(APP_PATH)
     at.run(timeout=APP_TIMEOUT)
@@ -456,7 +505,64 @@ def test_trace_expander_shown_for_agent_tool_calls(monkeypatch: pytest.MonkeyPat
 
     assert not at.exception
     expander_labels = [e.label for e in at.expander]
-    assert any("Recherches effectuées" in label for label in expander_labels)
+    assert any("Raisonnement de l'agent" in label for label in expander_labels)
+
+
+def test_m75_agent_mode_single_trace_french_numbers_and_chips(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M7.5 sections 7.4/7.5/7.6/7.7, all in one real agent exchange:
+    - inline "[p. N]" chips (not raw bracket text) -- 7.4
+    - no lingering "…"-labeled status box once the answer is done -- 7.5
+    - exactly ONE trace expander, not two -- 7.6
+    - French number formatting + correct singular/plural -- 7.7
+    """
+    monkeypatch.setattr("app.config.get_settings", lambda: _settings())
+    result = _answer(
+        mode_used="agent",
+        answer="Le béton doit avoir une classe C12/15 [p. 20].",
+        citations=[Citation(page=20, content_type="text", node_id="n1", snippet="béton")],
+        tool_calls=[
+            {
+                "tool": "search_manual",
+                "args": {"query": "classe de béton"},
+                "n_results": 1,
+                "seconds": 4.188,
+            },
+            {
+                "tool": "search_tables",
+                "args": {"query": "C12/15"},
+                "n_results": 6,
+                "seconds": 1.2,
+            },
+        ],
+    )
+    monkeypatch.setattr(chat_module, "get_agent_answer", lambda *a, **k: result)
+
+    at = AppTest.from_file(APP_PATH)
+    at.run(timeout=APP_TIMEOUT)
+    _select_mode(at, "Agent")
+    at.chat_input[0].set_value("Quelle classe de béton ?").run(timeout=APP_TIMEOUT)
+    assert not at.exception
+
+    # 7.4: inline citation rendered as a chip, not raw "[p. 20]" text.
+    full_markdown = "\n".join(m.value for m in at.markdown)
+    assert "[p. 20]" not in full_markdown
+    assert 'class="md-chip"' in full_markdown and "p.&nbsp;20" in full_markdown
+
+    # 7.5/7.6: exactly one trace, correctly labeled, no stale "…" status.
+    expander_labels = [e.label for e in at.expander]
+    trace_labels = [label for label in expander_labels if "Raisonnement de l'agent" in label]
+    assert len(trace_labels) == 1
+    assert trace_labels[0] == "Raisonnement de l'agent · 2 recherche(s)"
+    assert "Réflexion de l'agent…" not in full_markdown
+
+    # 7.7: French formatting -- "4,2 s" not "4.188s", singular/plural result.
+    captions = [c.value for c in at.caption]
+    assert any("4,2 s" in c for c in captions)
+    assert any("1 résultat ·" in c for c in captions)
+    assert any("6 résultats ·" in c for c in captions)
+    assert not any("résultat(s)" in c for c in captions)
 
 
 def test_photo_attachment_passes_image_path_to_agent(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -780,7 +886,12 @@ def test_section6_3_source_row_top_line_is_a_single_html_block() -> None:
     # Only the code after the docstring (which mentions "st.columns" in
     # prose) up to the snippet caption -- the actual top-line block.
     code_only = render_source_row_body.split('"""')[-1]
-    top_line_block = code_only.split("st.caption(snippet")[0]
+    # M7.5 section 7.2 fix: the snippet caption is now
+    # `st.caption(_clamp_word_boundary(snippet))` / `_clean_table_snippet(...)`,
+    # not the literal `st.caption(snippet[:160])` this boundary marker used
+    # to match on -- split on the first `st.caption(` call instead (still
+    # the snippet line, still right after the top-line HTML block).
+    top_line_block = code_only.split("st.caption(")[0]
     assert "st.columns(" not in top_line_block
     assert "display:flex" in top_line_block
     assert "p.&nbsp;{page}" in top_line_block
@@ -901,6 +1012,61 @@ def test_parse_markdown_table_returns_none_for_a_bare_table_row_snippet() -> Non
     from ui.components.cards import _parse_markdown_table
 
     assert _parse_markdown_table("Symbole|Description\n[pictogramme]|Risque") is None
+
+
+# --- M7.5 section 7.2/7.3: text snippet/passage display fixes ---------------
+
+
+def test_m75_text_snippet_clamps_at_a_word_boundary_not_mid_word() -> None:
+    """Real regression: a flat `snippet[:160]` slice cut a text-passage
+    snippet mid-word ("...et être conf")."""
+    from ui.components.cards import _clamp_word_boundary
+
+    text = (
+        "4.3 Exigences de la base en béton Le béton doit avoir une classe de "
+        "résistance à la compression de C12/15 et être conforme aux exigences locales."
+    )
+    clamped = _clamp_word_boundary(text, max_chars=70)
+    assert clamped.endswith("…")
+    assert not clamped[:-1].rstrip().endswith(("conf", "et être conf"))
+
+
+def test_m75_reflow_passage_joins_a_sentence_split_by_pdf_line_breaks() -> None:
+    from ui.components.cards import _reflow_passage_text
+
+    text = "Le béton doit être conforme\naux exigences locales si on\nsouhaite une bonne tenue."
+    reflowed = _reflow_passage_text(text)
+    assert "conforme\naux" not in reflowed
+    assert "conforme aux exigences locales si on souhaite une bonne tenue." in reflowed
+
+
+def test_m75_reflow_passage_keeps_bullets_on_their_own_line() -> None:
+    from ui.components.cards import _reflow_passage_text
+
+    text = "Avant de commencer :\n• Couper l'alimentation\n• Vérifier la pression\nFin."
+    reflowed = _reflow_passage_text(text)
+    lines = reflowed.splitlines()
+    assert "• Couper l'alimentation" in lines
+    assert "• Vérifier la pression" in lines
+
+
+def test_m75_reflow_passage_keeps_numbered_bullets_and_headings_separate() -> None:
+    from ui.components.cards import _reflow_passage_text
+
+    text = "4.3 Exigences de la base en béton\n1. Corps de pompe\n2. Orifice de refoulement"
+    reflowed = _reflow_passage_text(text)
+    lines = reflowed.splitlines()
+    assert "4.3 Exigences de la base en béton" in lines
+    assert "1. Corps de pompe" in lines
+    assert "2. Orifice de refoulement" in lines
+
+
+def test_m75_reflow_passage_keeps_blank_lines_as_paragraph_breaks() -> None:
+    from ui.components.cards import _reflow_passage_text
+
+    text = "Premier paragraphe\nsur deux lignes.\n\nDeuxième paragraphe."
+    reflowed = _reflow_passage_text(text)
+    assert reflowed == "Premier paragraphe sur deux lignes.\n\nDeuxième paragraphe."
 
 
 # --- Section 7: new user feedback after section 6 --------------------------

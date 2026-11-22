@@ -62,6 +62,16 @@ def test_css_does_not_override_icon_font_globally() -> None:
     assert '[class*="st-"]' not in css
 
 
+def test_segmented_control_checked_option_always_highlighted() -> None:
+    """M7.5 section 7.1 fix: the Simple/Agent mode selector was reported to
+    sometimes look unselected -- force an unmistakable highlight directly
+    off the DOM's own aria-checked state, independent of Streamlit's
+    default styling/rendering timing."""
+    css = build_css()
+    assert '[data-testid="stSegmentedControl"] [role="radio"][aria-checked="true"]' in css
+    assert COLORS["primary"] in css
+
+
 def test_body_text_contrast_meets_wcag_aa_normal_text() -> None:
     assert contrast_ratio(COLORS["ink"], COLORS["page_bg"]) >= 4.5
     assert contrast_ratio(COLORS["ink"], COLORS["surface"]) >= 4.5

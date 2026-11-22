@@ -196,6 +196,41 @@ def _clamp_word_boundary(text: str, max_chars: int = SNIPPET_MAX_CHARS) -> str:
     return text[:max_chars].rsplit(" ", 1)[0] + "…"
 
 
+_BULLET_LINE_PATTERN = re.compile(r"^(?:[•\-]|\d+[.)])\s+")
+_HEADING_LINE_PATTERN = re.compile(r"^\d+(?:\.\d+)+\s+\S")  # e.g. "4.3 Exigences..."
+
+
+def _reflow_passage_text(text: str) -> str:
+    """M7.5 section 7.3 fix: "Voir le passage" kept the PDF's hard line
+    breaks inside a single sentence ("conforme\\naux exigences"), since the
+    stored chunk text is extracted line-by-line from the PDF layout.
+    DISPLAY ONLY -- the stored chunk/citation text itself is never touched.
+    Reflows consecutive plain-text lines into one paragraph (joined with a
+    space), while keeping real structure on its own line: bullets (•, -, or
+    "1. "/"1) "), section headings ("4.3 Exigences..."), and blank lines
+    (paragraph breaks)."""
+    blocks: list[str] = []
+    buffer: list[str] = []
+
+    def flush() -> None:
+        if buffer:
+            blocks.append(" ".join(buffer))
+            buffer.clear()
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            flush()
+            blocks.append("")
+        elif _HEADING_LINE_PATTERN.match(stripped) or _BULLET_LINE_PATTERN.match(stripped):
+            flush()
+            blocks.append(stripped)
+        else:
+            buffer.append(stripped)
+    flush()
+    return "\n".join(blocks)
+
+
 def _clean_table_snippet(
     content_type: str | None, full_text: str | None, snippet: str
 ) -> str:
@@ -261,7 +296,10 @@ def render_source_row(
     if content_type in ("table", "table_row"):
         st.caption(_clean_table_snippet(content_type, full_text, snippet))
     else:
-        st.caption(snippet[:160])
+        # M7.5 section 7.2 fix: a flat `snippet[:160]` slice could cut a
+        # text-passage snippet mid-word ("...et être conf") -- same
+        # word-boundary clamp as the table snippet above.
+        st.caption(_clamp_word_boundary(snippet))
     view_label = _VIEW_LABELS.get(content_type or "text", "Voir le passage")
     material_icon = MATERIAL_ICONS.get(content_type or "text", "description")
     with st.expander(view_label, icon=f":material/{material_icon}:", key=f"{key}_expander"):
@@ -280,7 +318,7 @@ def render_source_row(
             else:
                 _render_table_preview(content_type, page, full_text, snippet, table_id)
         else:
-            st.text(full_text or snippet)
+            st.text(_reflow_passage_text(full_text or snippet))
 
 
 def render_refusal_card(answer_text: str) -> None:
@@ -477,20 +515,33 @@ def render_trace(result: RAGAnswer, key_prefix: str = "answer") -> None:
     refusal after re-search, or fallback) -- never raw chain-of-thought,
     only tool name/args/result count/duration. `key_prefix` must be unique
     per message (M7.4c fix) -- without an explicit key, several expanders
-    with an identical label across messages can collide."""
+    with an identical label across messages can collide.
+
+    M7.5 section 7.5/7.6 fix: this is now the ONE and ONLY trace element
+    (the live "Réflexion de l'agent…" indicator in chat.py is a plain
+    st.spinner that fully disappears once the agent finishes -- it used to
+    be a st.status() that stayed on screen afterwards with its "…" label
+    never updated, which looked like a second, separate trace next to this
+    expander). Label text matches the spec exactly: "Raisonnement de
+    l'agent · N recherche(s)"."""
     if not result.tool_calls:
         return
+    n = len(result.tool_calls)
     with st.expander(
-        f"Recherches effectuées ({len(result.tool_calls)})",
+        f"Raisonnement de l'agent · {n} recherche(s)",
         icon=":material/travel_explore:",
         key=f"{key_prefix}_trace",
     ):
         for call in result.tool_calls:
             label = TOOL_LABELS.get(call["tool"], call["tool"])
             query = call.get("args", {}).get("query") or call.get("args", {}).get("page", "")
-            st.caption(
-                f"{label} · « {query} » · {call['n_results']} résultat(s) · {call['seconds']}s"
-            )
+            n_results = call["n_results"]
+            # M7.5 section 7.7 fix: French formatting -- "4,2 s" (not
+            # "4.188s") and correct singular/plural ("1 résultat" / "6
+            # résultats", not the English-style "résultat(s)").
+            duration = fr_seconds(call["seconds"] * 1000)
+            result_word = "résultat" if n_results == 1 else "résultats"
+            st.caption(f"{label} · « {query} » · {n_results} {result_word} · {duration}")
 
 
 def render_answer_meta(result: RAGAnswer, key_prefix: str = "answer") -> None:

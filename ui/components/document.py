@@ -213,11 +213,21 @@ def _run_pipeline(pdf_path: Path, use_vlm: bool, settings: Settings) -> tuple[di
 
 
 def render_document_tab(settings: Settings) -> None:
+    # M7.5 section 4 fix: a real bug found by driving the full upload flow
+    # end-to-end (select a file, THEN click "Indexer ce document") -- the
+    # import section's visibility depended on `import_clicked`, the
+    # BUTTON's transient return value, which is True only on the exact
+    # rerun the button itself was clicked on. Selecting a file in the
+    # uploader triggers its OWN rerun, on which `import_clicked` is False
+    # again, hiding the whole upload section (file_uploader AND "Indexer ce
+    # document") right when the user tries to use it. Persisted in
+    # session_state instead -- same pattern as
+    # image_search.py's "image_search_show_camera" flag.
     header = st.columns([4, 1])
     with header[1]:
-        import_clicked = st.button(
-            "Importer un autre PDF", icon=":material/upload_file:", type="secondary"
-        )
+        if st.button("Importer un autre PDF", icon=":material/upload_file:", type="secondary"):
+            st.session_state["document_show_import"] = True
+    show_import = st.session_state.get("document_show_import", False)
 
     docs = _list_documents()
     if docs:
@@ -230,7 +240,7 @@ def render_document_tab(settings: Settings) -> None:
 
     render_eval_quality_table()
 
-    if import_clicked or not docs:
+    if show_import or not docs:
         st.markdown("###### Importer un manuel")
         uploaded = st.file_uploader("Manuel PDF", type=["pdf"])
         use_vlm = st.checkbox(

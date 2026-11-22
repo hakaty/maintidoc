@@ -1,0 +1,38 @@
+# M7.5: never bake these into the image.
+
+.venv/
+.git/
+.env
+.env.*
+!.env.example
+
+exports/
+data/test_photos/
+docs/design/screenshots/
+
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.log
+
+.claude/
+.streamlit/secrets.toml
+
+# Real document/extraction output: mounted as a bind volume at runtime
+# (docker-compose.yml), never part of the image itself.
+data/pdf/*
+!data/pdf/.gitkeep
+!data/pdf/README.md
+data/media/*
+!data/media/.gitkeep
+data/processed/
+
+models/
+
+tests/
+eval/agent_run_debug.log
+
+.tmp_uploads/

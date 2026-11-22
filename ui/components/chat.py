@@ -295,12 +295,21 @@ def render_assistant_tab(settings: Settings) -> None:
                     image_path = None
                     if uploaded_photo:
                         image_path = _save_uploaded_photo(uploaded_photo.getvalue())
-                    with st.status("Réflexion de l'agent…", expanded=False):
+                    # M7.5 section 7.5/7.6 fix: a plain spinner, not
+                    # st.status() -- it fully disappears once this `with`
+                    # block exits instead of staying on screen with its "…"
+                    # label never updated, which looked like a second,
+                    # separate trace next to render_trace()'s expander
+                    # below (the ONE real trace, "under the answer
+                    # footer").
+                    with st.spinner("Réflexion de l'agent…"):
                         result = get_agent_answer(question, settings, session_id, image_path)
-                    if result.error or result.refused:
-                        render_answer_text(result, key_prefix=f"msg_{message_id}")
-                    else:
-                        st.markdown(result.answer)
+                    # M7.5 section 7.4 fix: render_answer_text() applies the
+                    # same inline "[p. N]" -> chip conversion as Simple mode
+                    # (it used to be a bare st.markdown(result.answer) here,
+                    # bypassing that conversion entirely for a successful
+                    # agent answer).
+                    render_answer_text(result, key_prefix=f"msg_{message_id}")
                     render_answer_meta(result, key_prefix=f"msg_{message_id}")
                     render_trace(result, key_prefix=f"msg_{message_id}")
                 else:

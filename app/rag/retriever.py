@@ -63,6 +63,19 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // CHARS_PER_TOKEN)
 
 
+def _to_posix_path(path: str | None) -> str | None:
+    """M7.5 Docker fix: `image_path` was stored with Windows-style
+    backslashes (extraction ran on Windows and serialised `str(Path(...))`
+    verbatim into the index) -- harmless on Windows, but
+    `streamlit.runtime.media_file_storage.MediaFileStorageError` /
+    `FileNotFoundError` on Linux (the container), since a backslash is a
+    literal filename character there, not a path separator. Normalises on
+    READ so already-indexed data (this project's one shared PostgreSQL
+    volume, used from both Windows and the Linux container) works
+    immediately, without needing a re-extraction/re-index."""
+    return path.replace("\\", "/") if path else path
+
+
 def _to_retrieved_node(node: BaseNode, score: float) -> RetrievedNode:
     meta = node.metadata
     return RetrievedNode(
@@ -72,7 +85,7 @@ def _to_retrieved_node(node: BaseNode, score: float) -> RetrievedNode:
         score=float(score),
         text=node.get_content(),
         image_id=meta.get("image_id"),
-        image_path=meta.get("image_path"),
+        image_path=_to_posix_path(meta.get("image_path")),
         safety_relevant=meta.get("safety_relevant"),
         table_id=meta.get("table_id"),
     )

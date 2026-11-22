@@ -208,7 +208,12 @@ def extract_images(
 def image_to_node(image: ExtractedImage, pdf_sha256: str, source_file: str) -> ImageNode:
     return ImageNode(
         id_=image.image_id,
-        image_path=str(image.image_path),
+        # M7.5 Docker fix: `.as_posix()`, never `str(path)` -- this project's
+        # one shared PostgreSQL volume is read from both Windows (native)
+        # and the Linux container, and a Windows `str(Path(...))` bakes in
+        # backslashes that only work on Windows. Forward slashes are valid
+        # path separators on both.
+        image_path=image.image_path.as_posix(),
         text=image.caption or "",
         metadata={
             "content_type": "image",

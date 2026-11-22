@@ -1,0 +1,60 @@
+# Optional GPU variant (`docker compose --profile gpu up -d app-gpu`).
+# NOT the documented/verified workflow: the GPU owner runs Ollama NATIVELY
+# and keeps the Streamlit container CPU-only (see Dockerfile) -- this exists
+# for completeness / a Linux user who wants embeddings on a dockerised GPU
+# too. Requires WSL2 + the NVIDIA Container Toolkit (docs/07_docker.md).
+
+FROM nvidia/cuda:12.6.0-runtime-ubuntu22.04 AS base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.11 \
+        python3.11-venv \
+        python3-pip \
+        libgl1 \
+        libglib2.0-0 \
+        tesseract-ocr \
+        tesseract-ocr-fra \
+        curl \
+        postgresql-client \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python
+
+WORKDIR /app
+
+COPY requirements-docker.txt pyproject.toml ./
+
+# CUDA torch (matches the CUDA 12.6 runtime above), same pinned version as
+# the CPU image otherwise.
+RUN python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu126 \
+        torch==2.14.1 torchvision==0.29.1 \
+    && python -m pip install --no-cache-dir -r requirements-docker.txt
+
+COPY app ./app
+COPY ui ./ui
+COPY scripts ./scripts
+COPY prompts ./prompts
+COPY eval ./eval
+COPY .streamlit ./.streamlit
+COPY README.md ./
+
+RUN python -m pip install --no-cache-dir --no-deps -e .
+
+RUN useradd --create-home --uid 1000 maintidoc \
+    && mkdir -p data/pdf data/processed data/media models \
+    && chown -R maintidoc:maintidoc /app
+USER maintidoc
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    HF_HOME=/app/models \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
+EXPOSE 8501
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -f http://127.0.0.1:8501/_stcore/health || exit 1
+
+CMD ["python", "-m", "streamlit", "run", "ui/streamlit_app.py", \
+     "--server.address", "0.0.0.0", "--server.port", "8501", \
+     "--server.headless", "true"]

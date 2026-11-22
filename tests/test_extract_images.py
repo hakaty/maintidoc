@@ -62,7 +62,9 @@ def test_image_to_node_metadata(extraction, sample_pdf: Path, sample_pdf_sha256:
     assert node.metadata["content_type"] == "image"
     assert node.metadata["description"] == ""
     assert node.metadata["clip_embedding"] is None
-    assert node.image_path == str(kept[0].image_path)
+    # M7.5: stored as a posix path (forward slashes) so it loads correctly
+    # whether read from Windows or inside the Linux Docker container.
+    assert node.image_path == kept[0].image_path.as_posix()
     assert node.metadata["source"] == "embedded"
     assert node.metadata["kind"] == "figure"
     assert node.metadata["sha256"] == kept[0].sha256

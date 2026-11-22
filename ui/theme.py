@@ -257,6 +257,20 @@ def build_css() -> str:
     width: auto;
 }}
 
+/* M7.5 section 7.1 fix: the Simple/Agent mode selector was reported to
+   sometimes LOOK unselected (both options the same, un-highlighted) even
+   though the widget's own aria-checked state was confirmed correct in
+   testing -- a brief rendering/hydration window where Streamlit's own
+   default segmented-control highlight hadn't painted yet. This forces an
+   unmistakable, always-correct highlight directly from the DOM's own
+   aria-checked attribute, independent of Streamlit's default styling
+   timing. */
+[data-testid="stSegmentedControl"] [role="radio"][aria-checked="true"] {{
+    background-color: {c["primary"]} !important;
+    color: #FFFFFF !important;
+    font-weight: {FONT_WEIGHTS["semibold"]} !important;
+}}
+
 .md-mono {{
     font-family: {FONT_MONO};
     font-variant-numeric: tabular-nums;

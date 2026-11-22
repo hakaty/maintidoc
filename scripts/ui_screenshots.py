@@ -379,6 +379,28 @@ def _capture_document(page, base_url: str, out_prefix: str, server_log: str) -> 
     return out
 
 
+def _strip_benign_asyncio_noise(log: str) -> str:
+    """Windows' ProactorEventLoop logs its own "Traceback (most recent call
+    last):" block whenever a client (the browser, a dev-server reload...)
+    resets a TCP connection instead of closing it cleanly -- a harmless OS/
+    asyncio-internals artifact, never an app-level exception, but it uses
+    the exact same "Traceback" string the real-crash check below looks for.
+    Strip just that known benign block so a real app traceback still fails
+    the check."""
+    marker = "_ProactorBasePipeTransport._call_connection_lost"
+    while marker in log:
+        start = log.index(marker)
+        line_start = log.rfind("\n", 0, start)
+        line_start = log.rfind("\n", 0, line_start) + 1 if line_start != -1 else 0
+        end = log.find("ConnectionResetError", start)
+        if end == -1:
+            break
+        end = log.find("\n", end)
+        end = len(log) if end == -1 else end + 1
+        log = log[:line_start] + log[end:]
+    return log
+
+
 def _check_no_error_card_or_traceback(page, server_log: str, capture: str) -> None:
     """M7.4c fix: the 2nd question in a conversation crashed with
     StreamlitDuplicateElementKey -- this is the real-browser flow that
@@ -386,6 +408,7 @@ def _check_no_error_card_or_traceback(page, server_log: str, capture: str) -> No
     M7.4b verification only ever asked ONE question per fresh AppTest
     instance)."""
     body_text = page.locator("body").inner_text()
+    clean_log = _strip_benign_asyncio_noise(server_log)
     _record(
         capture,
         "no_error_card_on_page",
@@ -394,8 +417,8 @@ def _check_no_error_card_or_traceback(page, server_log: str, capture: str) -> No
     _record(
         capture,
         "no_traceback_in_server_log",
-        "Traceback (most recent call last)" not in server_log
-        and "DuplicateElementKey" not in server_log,
+        "Traceback (most recent call last)" not in clean_log
+        and "DuplicateElementKey" not in clean_log,
     )
 
 
@@ -643,8 +666,10 @@ def main(argv: list[str] | None = None) -> int:
     # check against "" at call time (the real server log is only available
     # after the process is terminated), then get corrected here against the
     # final captured log.
+    clean_server_log = _strip_benign_asyncio_noise(server_log)
     has_traceback = (
-        "Traceback (most recent call last)" in server_log or "DuplicateElementKey" in server_log
+        "Traceback (most recent call last)" in clean_server_log
+        or "DuplicateElementKey" in clean_server_log
     )
     if has_traceback:
         for i, (capture, check, _passed, detail) in enumerate(CHECK_RESULTS):

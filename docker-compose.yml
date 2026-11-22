@@ -1,10 +1,14 @@
-# `db` is always started by `docker compose up -d`. `ollama` is OPT-IN via the
-# "ollama" profile (`docker compose --profile ollama up -d`): on Windows the
-# recommended setup is a native Ollama install (see docs/setup.md), which is
-# faster (GPU access) and avoids running a second container nobody needs when
-# OLLAMA_BASE_URL already points at a native install or at OpenRouter is used.
-# Both ports are bound to 127.0.0.1 only (not 0.0.0.0): reachable from the
-# host for local development and scripts/check_env.py, not exposed on the network.
+# `db` is ALWAYS started by `docker compose up -d` (no profile). The app
+# itself is OPT-IN via the "app" profile (`docker compose --profile app up
+# -d`) so a native `python -m streamlit run ...` workflow is unaffected by
+# just running `docker compose up -d` for the database alone (unchanged
+# since M1). `ollama-docker` is a SEPARATE, never-started-by-default profile
+# for Linux users without a native Ollama install -- on Windows, native
+# Ollama (with GPU access) is the supported, documented setup; this project
+# NEVER runs Ollama in Docker on the GPU machine. See docs/07_docker.md.
+#
+# All ports are bound to 127.0.0.1 only (never 0.0.0.0): reachable from the
+# host, never exposed on the network.
 
 services:
   db:
@@ -27,9 +31,85 @@ services:
       retries: 10
       start_period: 10s
 
-  ollama:
-    profiles: ["ollama"]
+  # M7.5: the Streamlit UI + RAG/agent code, CPU-only (default profile for
+  # both the GPU owner -- who still uses NATIVE Ollama, never dockerised --
+  # and the no-GPU colleague on OpenRouter). "docker compose --profile app
+  # up -d" starts this alongside `db`.
+  app: &app
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8501:8501"
+    env_file:
+      - .env
+    environment:
+      # Overrides .env's host-facing values with the in-network/in-container
+      # equivalents -- never baked into the image, never hardcoded secrets.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-maintidoc}:${POSTGRES_PASSWORD:-maintidoc}@db:5432/${POSTGRES_DB:-maintidoc}
+      # Reaches the GPU owner's NATIVE Ollama install on the Windows host
+      # (never a dockerised Ollama) -- requires extra_hosts below on Linux;
+      # Docker Desktop (Windows/Mac) resolves this hostname natively.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      DEVICE: cpu
+      EMBED_QUERY_DEVICE: cpu
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # HF model cache (BGE-M3, MobileCLIP): downloaded once, reused across
+      # restarts/rebuilds -- never re-downloaded just because the container
+      # was recreated.
+      - hf_cache:/app/models
+      # The single input PDF, extracted images/tables and the processed
+      # manifest -- survives `docker compose down` / `up` (a real volume,
+      # not a container layer) and is also where an uploaded PDF (section 4)
+      # lands.
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8501/_stcore/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Optional GPU variant (`docker compose --profile gpu up -d app-gpu`):
+  # needs WSL2 + the NVIDIA Container Toolkit (see docs/07_docker.md). Not
+  # used by the documented workflow (the GPU owner runs Ollama NATIVELY and
+  # the Streamlit container stays CPU-only -- BGE-M3/MobileCLIP CPU
+  # inference is already fast enough); provided for completeness/Linux
+  # users who want embeddings on a dockerised GPU too.
+  app-gpu:
+    <<: *app
+    profiles: ["gpu"]
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-maintidoc}:${POSTGRES_PASSWORD:-maintidoc}@db:5432/${POSTGRES_DB:-maintidoc}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      DEVICE: cuda
+      EMBED_QUERY_DEVICE: cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Never started by default (no profile = "app"/"gpu", a SEPARATE,
+  # explicit "ollama-docker" profile): `docker compose --profile
+  # ollama-docker up -d`. For a Linux user with no native Ollama install
+  # only -- the GPU owner's Windows machine always uses native Ollama.
+  ollama-docker:
+    profiles: ["ollama-docker"]
     image: ollama/ollama:latest
+    restart: unless-stopped
     ports:
       - "127.0.0.1:11434:11434"
     volumes:
@@ -38,3 +118,4 @@ services:
 volumes:
   db_data:
   ollama_data:
+  hf_cache:
