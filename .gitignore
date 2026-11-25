@@ -56,3 +56,6 @@ dist/
 *.dump
 
 docs/diagnostics/*.png
+
+.claude/
+CLAUDE.md
