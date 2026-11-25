@@ -54,3 +54,5 @@ dist/
 *.zip
 *.sql
 *.dump
+
+docs/diagnostics/*.png
