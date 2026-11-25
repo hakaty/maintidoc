@@ -45,3 +45,12 @@ docs/diagnostics/image_threshold/
 # image-search threshold (not authored by this project) -- never committed,
 # same reasoning as the single input PDF above.
 data/test_photos/
+
+.env
+data/pdf/
+data/test_photos/
+exports/
+dist/
+*.zip
+*.sql
+*.dump
